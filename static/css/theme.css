@@ -171,9 +171,13 @@ body {
        com min-height, o Safari e o Chrome no iOS não esticam o conteúdo
        e o rodapé/centralização ficam errados. Se o conteúdo da página for
        maior que a tela, o body ainda cresce normalmente (isso não vira
-       um "clip" de altura fixa). */
+       um "clip" de altura fixa).
+       --vh100 (definida via JS no <head> de cada página, com
+       window.innerHeight) no lugar de 100dvh: em navegadores in-app
+       (ex.: o do WhatsApp) o 100dvh não acompanha a altura real da tela -
+       100vh continua aqui só como último fallback se o JS não rodar. */
     height: 100vh;
-    height: 100dvh;
+    height: var(--vh100, 100vh);
     display: flex;
     flex-direction: column;
     /* padding-top compensado por cada página individualmente */

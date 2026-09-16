@@ -59,6 +59,23 @@
             var tema = localStorage.getItem('tema-afa') || 'dark';
             document.documentElement.setAttribute('data-theme', tema);
         })();
+
+        // Altura real da tela via JS (--vh100), em vez de depender de
+        // unidades vh/dvh - alguns navegadores in-app (ex.: o do WhatsApp)
+        // nao calculam 100dvh direito e ficam presos na altura "grande"
+        // (com a barra de endereco escondida), descentralizando o layout.
+        // window.innerHeight funciona em qualquer navegador ha anos.
+        (function () {
+            function definirAlturaReal() {
+                document.documentElement.style.setProperty('--vh100', window.innerHeight + 'px');
+            }
+            definirAlturaReal();
+            window.addEventListener('resize', definirAlturaReal);
+            window.addEventListener('orientationchange', definirAlturaReal);
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', definirAlturaReal);
+            }
+        })();
     </script>
 
     <style>
@@ -88,10 +105,15 @@
             /* "height" (não "min-height") de propósito: no WebKit/iOS o
                flex-grow do .login-conteudo (flex:1) só distribui o espaço
                certo quando o container tem uma altura definida - com
-               min-height, o Safari e o Chrome no iOS (que usa o mesmo
-               motor) não esticam o conteúdo e o card fica desalinhado. */
+               min-height, o Safari e o Chrome no iOS não esticam o
+               conteúdo e o card fica desalinhado.
+               --vh100 (definida via JS logo acima, com window.innerHeight)
+               no lugar de 100dvh: em navegadores in-app (ex.: o do
+               WhatsApp) o 100dvh não acompanha a altura real da tela -
+               100vh continua aqui só como último fallback se o JS não
+               rodar por algum motivo. */
             height: 100vh;
-            height: 100dvh;
+            height: var(--vh100, 100vh);
             padding: 16px;
         }
 
@@ -473,6 +495,7 @@
                     'documentElement.clientHeight: ' + document.documentElement.clientHeight,
                     'body computed height: ' + getComputedStyle(document.body).height,
                     'body offsetHeight/scrollHeight: ' + document.body.offsetHeight + ' / ' + document.body.scrollHeight,
+                    '--vh100: ' + getComputedStyle(document.documentElement).getPropertyValue('--vh100'),
                     medir('.login-conteudo'),
                     medir('.login-card-wrapper'),
                     medir('footer'),

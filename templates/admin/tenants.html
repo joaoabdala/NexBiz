@@ -25,6 +25,23 @@
             var tema = localStorage.getItem('tema-afa') || 'dark';
             document.documentElement.setAttribute('data-theme', tema);
         })();
+
+        // Altura real da tela via JS (--vh100), em vez de depender de
+        // unidades vh/dvh - alguns navegadores in-app (ex.: o do WhatsApp)
+        // nao calculam 100dvh direito e ficam presos na altura "grande"
+        // (com a barra de endereco escondida), descentralizando o layout.
+        // window.innerHeight funciona em qualquer navegador ha anos.
+        (function () {
+            function definirAlturaReal() {
+                document.documentElement.style.setProperty('--vh100', window.innerHeight + 'px');
+            }
+            definirAlturaReal();
+            window.addEventListener('resize', definirAlturaReal);
+            window.addEventListener('orientationchange', definirAlturaReal);
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', definirAlturaReal);
+            }
+        })();
     </script>
 
     <style>
