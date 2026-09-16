@@ -97,31 +97,22 @@
             color: #111827 !important;
         }
 
-        /* Coluna: conteúdo centralizado ocupa o espaço disponível, rodapé
-           fica sempre colado embaixo */
+        /* Mesma técnica do login do NexGarage: um único container
+           position:relative + min-height:100vh que centraliza o card
+           (flex + align/justify-content:center), com o rodapé ancorado
+           via position:absolute no rodapé dele - em vez de "body em
+           coluna com flex:1 + rodapé", que depende de dois elementos
+           dividindo espaço via flex-grow e é onde os navegadores mobile
+           divergiam entre si. Sem flex-grow disputando espaço, não tem
+           o que dar errado mesmo se 100vh calcular um valor levemente
+           diferente da tela visível. */
         body {
-            display: flex;
-            flex-direction: column;
-            /* "height" (não "min-height") de propósito: no WebKit/iOS o
-               flex-grow do .login-conteudo (flex:1) só distribui o espaço
-               certo quando o container tem uma altura definida - com
-               min-height, o Safari e o Chrome no iOS não esticam o
-               conteúdo e o card fica desalinhado.
-               --vh100 (definida via JS logo acima, com window.innerHeight)
-               no lugar de 100dvh: em navegadores in-app (ex.: o do
-               WhatsApp) o 100dvh não acompanha a altura real da tela -
-               100vh continua aqui só como último fallback se o JS não
-               rodar por algum motivo. */
-            height: 100vh;
-            height: var(--vh100, 100vh);
-            padding: 16px;
-        }
-
-        .login-conteudo {
-            flex: 1;
+            position: relative;
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 16px;
         }
 
         /* Botão de tema fixo no canto da tela - independe do layout do card */
@@ -138,6 +129,15 @@
             align-items: center;
             justify-content: center;
             gap: 72px;
+        }
+
+        /* Ancorado no fundo do body (position:relative) - ver comentário
+           na regra de "body" acima. */
+        .login-rodape {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
         }
 
         .login-card-wrapper {
@@ -284,8 +284,9 @@
 
     <!-- ══════════════════════════════════════════════════════════
          CONTEÚDO CENTRAL: card de login à esquerda + radar à direita
+         Centralizado direto pelo <body> (position:relative + flex) -
+         ver comentário na regra de "body" no <style> acima.
          ══════════════════════════════════════════════════════════ -->
-    <div class="login-conteudo">
     <div class="login-split">
 
     <div class="login-card-wrapper">
@@ -390,13 +391,13 @@
 
     </div>
     <!-- /.login-split -->
-    </div>
-    <!-- /.login-conteudo -->
 
     <!-- ══════════════════════════════════════════════════════════
-         RODAPÉ
+         RODAPÉ - ancorado embaixo do <body> via position:absolute
+         (mesma técnica do NexGarage), não disputa espaço em flex
+         com o conteúdo centralizado acima.
          ══════════════════════════════════════════════════════════ -->
-    <footer class="py-2">
+    <footer class="login-rodape py-2">
         <div class="container-fluid">
             <div class="row">
                 <div class="col text-center">
@@ -496,7 +497,6 @@
                     'body computed height: ' + getComputedStyle(document.body).height,
                     'body offsetHeight/scrollHeight: ' + document.body.offsetHeight + ' / ' + document.body.scrollHeight,
                     '--vh100: ' + getComputedStyle(document.documentElement).getPropertyValue('--vh100'),
-                    medir('.login-conteudo'),
                     medir('.login-card-wrapper'),
                     medir('footer'),
                     'devicePixelRatio: ' + window.devicePixelRatio,
