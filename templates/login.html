@@ -109,10 +109,25 @@
         body {
             position: relative;
             min-height: 100vh;
+            /* --vh100 (JS, window.innerHeight - ver script no head) no
+               lugar de 100vh puro quando disponível: em alguns
+               navegadores/WebViews o valor de 100vh não bate com a
+               altura realmente visível, então o rodapé (position:
+               absolute; bottom:0) fica ancorado além do que dá pra ver
+               sem rolar. Como agora não tem mais flex-grow disputando
+               espaço, esse ajuste só refina o valor, não é mais
+               essencial pra centralizar (isso já funciona só com
+               100vh). */
+            min-height: var(--vh100, 100vh);
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 16px;
+            /* O NexGarage usa overflow:hidden no container equivalente.
+               Aqui só no eixo horizontal (nunca deveria existir rolagem
+               pros lados nessa página) - deixa o vertical livre, caso
+               uma tela muito baixa precise mesmo rolar pra ver tudo. */
+            overflow-x: hidden;
         }
 
         /* Botão de tema fixo no canto da tela - independe do layout do card */
