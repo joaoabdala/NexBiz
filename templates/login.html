@@ -85,11 +85,13 @@
         body {
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
-            /* 100dvh acompanha a barra de endereço dinâmica do Safari/iOS -
-               sem isso, 100vh é medido contra a tela cheia (barra escondida)
-               e o conteúdo fica descentralizado quando ela está visível. */
-            min-height: 100dvh;
+            /* "height" (não "min-height") de propósito: no WebKit/iOS o
+               flex-grow do .login-conteudo (flex:1) só distribui o espaço
+               certo quando o container tem uma altura definida - com
+               min-height, o Safari e o Chrome no iOS (que usa o mesmo
+               motor) não esticam o conteúdo e o card fica desalinhado. */
+            height: 100vh;
+            height: 100dvh;
             padding: 16px;
         }
 

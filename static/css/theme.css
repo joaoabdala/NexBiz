@@ -165,11 +165,15 @@ body {
     background-color: var(--cor-fundo-pagina) !important;
     color: var(--cor-texto-primario) !important;
     margin: 0;
-    min-height: 100vh;
-    /* 100dvh acompanha a barra de endereço dinâmica do Safari/iOS - sem
-       isso, 100vh é medido contra a tela cheia (barra escondida) e o
-       rodapé/conteúdo centralizado ficam descolados da tela visível. */
-    min-height: 100dvh;
+    /* "height" (não "min-height") de propósito: no WebKit/iOS o flex-grow
+       usado pra grudar o rodapé embaixo (.conteudo-principal, flex:1) só
+       distribui o espaço certo quando o body tem uma altura definida -
+       com min-height, o Safari e o Chrome no iOS não esticam o conteúdo
+       e o rodapé/centralização ficam errados. Se o conteúdo da página for
+       maior que a tela, o body ainda cresce normalmente (isso não vira
+       um "clip" de altura fixa). */
+    height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     /* padding-top compensado por cada página individualmente */
