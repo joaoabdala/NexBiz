@@ -6,3 +6,4 @@ beautifulsoup4==4.12.3
 psycopg2-binary==2.9.9
 Flask-WTF==1.2.2
 Flask-Limiter==3.8.0
+redis==5.0.8

@@ -47,6 +47,14 @@ app = Flask(__name__)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
+    if os.getenv("VERCEL"):
+        # Na Vercel isso nunca deveria cair aqui - falha alto e claro em vez
+        # de subir rodando com uma chave que muda a cada cold start (o que
+        # derrubaria sessões e o CSRF de forma imprevisível e silenciosa).
+        raise RuntimeError(
+            "SECRET_KEY não configurada. Defina essa variável de ambiente "
+            "no painel da Vercel antes do deploy."
+        )
     SECRET_KEY = secrets.token_hex(32)
     logging.warning(
         "SECRET_KEY não configurada no ambiente - usando uma chave temporária "
@@ -61,7 +69,28 @@ app.config["SESSION_COOKIE_SECURE"] = not app.debug
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
 
 csrf = CSRFProtect(app)
-limiter = Limiter(app=app, key_func=get_remote_address, default_limits=[])
+
+REDIS_URL = os.getenv("REDIS_URL")
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=[],
+    storage_uri=REDIS_URL,  # None = volta pro armazenamento em memória (só serve p/ dev local)
+)
+if not REDIS_URL:
+    logging.warning(
+        "REDIS_URL não configurada - rate limiting usando memória local, que não é "
+        "confiável em ambiente serverless (cada invocação pode cair numa instância "
+        "diferente). Configure REDIS_URL (ex.: Upstash) antes de ir para produção."
+    )
+
+
+@app.after_request
+def adicionar_headers_seguranca(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 def registrar_auditoria(acao: str, detalhes: str = "") -> None:
@@ -82,13 +111,37 @@ def registrar_auditoria(acao: str, detalhes: str = "") -> None:
 def eh_unico_admin_ativo(cursor, user_id) -> bool:
     """True se user_id é hoje um admin ativo e não existe nenhum outro
     admin ativo - usado pra impedir que a última pessoa com acesso ao
-    admin se desative, se exclua ou perca a role sem querer."""
+    admin se desative, se exclua ou perca a role sem querer.
+
+    Usa FOR UPDATE pra travar as linhas de admin ativo até a transação
+    terminar - evita que duas requisições concorrentes leiam a mesma
+    contagem antes de qualquer uma das duas commitar (race condition)."""
     cursor.execute("SELECT role, active FROM users WHERE id = %s", (user_id,))
     row = cursor.fetchone()
     if not row or row[0] != "admin" or not row[1]:
         return False
-    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = true")
-    return cursor.fetchone()[0] <= 1
+    cursor.execute("SELECT id FROM users WHERE role = 'admin' AND active = true FOR UPDATE")
+    return len(cursor.fetchall()) <= 1
+
+
+def tenant_e_ultimo_acesso_admin(cursor, tenant_id) -> bool:
+    """True se desativar tenant_id deixaria zero admins ativos com acesso
+    ao sistema (nenhum admin ativo restaria em nenhum outro tenant ativo)."""
+    cursor.execute("SELECT active FROM tenants WHERE id = %s", (tenant_id,))
+    row = cursor.fetchone()
+    if not row or not row[0]:
+        return False  # já inativo (ou não existe) - não é uma desativação
+    cursor.execute(
+        """
+        SELECT u.id FROM users u
+        JOIN tenants t ON t.id = u.tenant_id
+        WHERE u.role = 'admin' AND u.active = true AND t.active = true
+          AND u.tenant_id != %s
+        FOR UPDATE OF u
+        """,
+        (tenant_id,),
+    )
+    return len(cursor.fetchall()) == 0
 
 
 def login_required(view):
@@ -213,41 +266,54 @@ def index():
                                 f"Usuário: '{nome_usuario}' Realizou uma consulta com sucesso. CNPJ: '{data['cnpj']}'"
                             )
 
-                            conn = get_conn()
-                            cursor = conn.cursor()
+                            # Busca separada dos dados de referência (tributação/Lei do
+                            # Bem): se o Postgres falhar aqui, os dados da Receita já
+                            # obtidos continuam sendo exibidos normalmente - só esses
+                            # dois campos caem num aviso, em vez de renderizar "None"
+                            # ou derrubar a consulta inteira.
+                            msg_tp_tributacao = "Não foi possível verificar a tributação."
+                            msg_lei_do_bem = "Não foi possível verificar a Lei do Bem."
+                            conn_ref = None
+                            try:
+                                conn_ref = get_conn()
+                                cursor_ref = conn_ref.cursor()
 
-                            cursor.execute(
-                                """
-                                SELECT string_agg(
-                                    CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.tipo_tributacao,
-                                    ' | '
+                                cursor_ref.execute(
+                                    """
+                                    SELECT string_agg(
+                                        CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.tipo_tributacao,
+                                        ' | '
+                                    )
+                                    FROM cnpj_tipo_tributacao c
+                                    WHERE c.cnpj = %s
+                                    """,
+                                    (data.get("cnpj"),),
                                 )
-                                FROM cnpj_tipo_tributacao c
-                                WHERE c.cnpj = %s
-                                """,
-                                (data.get("cnpj"),),
-                            )
-                            linha = cursor.fetchone()
-                            msg_tp_tributacao = linha[0] if linha and linha[0] else "Tributação não identificada"
+                                linha = cursor_ref.fetchone()
+                                msg_tp_tributacao = linha[0] if linha and linha[0] else "Tributação não identificada"
 
-                            cursor.execute(
-                                """
-                                SELECT string_agg(
-                                    CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.uf,
-                                    ' | '
+                                cursor_ref.execute(
+                                    """
+                                    SELECT string_agg(
+                                        CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.uf,
+                                        ' | '
+                                    )
+                                    FROM cnpj_lei_do_bem c
+                                    WHERE c.cnpj = %s
+                                    """,
+                                    (data.get("cnpj"),),
                                 )
-                                FROM cnpj_lei_do_bem c
-                                WHERE c.cnpj = %s
-                                """,
-                                (data.get("cnpj"),),
-                            )
-                            linha_lei_do_bem = cursor.fetchone()
-                            msg_lei_do_bem = (
-                                linha_lei_do_bem[0] if linha_lei_do_bem and linha_lei_do_bem[0] else "Lei do Bem não identificada"
-                            )
+                                linha_lei_do_bem = cursor_ref.fetchone()
+                                msg_lei_do_bem = (
+                                    linha_lei_do_bem[0] if linha_lei_do_bem and linha_lei_do_bem[0] else "Lei do Bem não identificada"
+                                )
 
-                            cursor.close()
-                            conn.close()
+                                cursor_ref.close()
+                            except Exception:
+                                app.logger.exception("Erro ao buscar tributação/Lei do Bem")
+                            finally:
+                                if conn_ref:
+                                    conn_ref.close()
 
                             if "simples" in resultado:
                                 data_str = resultado["simples"].get("ultima_atualizacao", "").replace("Z", "")
@@ -353,10 +419,13 @@ def admin_tenants():
 
             elif acao == "alternar_status":
                 tenant_id = request.form.get("tenant_id")
-                cursor.execute("UPDATE tenants SET active = NOT active WHERE id = %s", (tenant_id,))
-                conn.commit()
-                registrar_auditoria("alternar_status_tenant", f"tenant_id={tenant_id}")
-                mensagem = "Status do tenant atualizado."
+                if tenant_e_ultimo_acesso_admin(cursor, tenant_id):
+                    erro = "Não é possível desativar: nenhum admin ativo teria mais acesso ao sistema depois disso."
+                else:
+                    cursor.execute("UPDATE tenants SET active = NOT active WHERE id = %s", (tenant_id,))
+                    conn.commit()
+                    registrar_auditoria("alternar_status_tenant", f"tenant_id={tenant_id}")
+                    mensagem = "Status do tenant atualizado."
 
             elif acao == "excluir":
                 tenant_id = request.form.get("tenant_id")
@@ -384,11 +453,13 @@ def admin_tenants():
                 conn.close()
 
     conn = get_conn()
-    cursor = dict_cursor(conn)
-    cursor.execute("SELECT id, name, slug, active, created_at FROM tenants ORDER BY name")
-    tenants = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    try:
+        cursor = dict_cursor(conn)
+        cursor.execute("SELECT id, name, slug, active, created_at FROM tenants ORDER BY name")
+        tenants = cursor.fetchall()
+        cursor.close()
+    finally:
+        conn.close()
 
     return render_template(
         "admin/tenants.html",
@@ -439,8 +510,15 @@ def admin_usuarios():
                 role = request.form.get("role") if request.form.get("role") in ("admin", "user") else "user"
                 tenant_id = request.form.get("tenant_id")
 
-                if role != "admin" and eh_unico_admin_ativo(cursor, user_id):
-                    erro = "Não é possível remover a permissão de admin do único usuário admin ativo."
+                cursor.execute("SELECT active FROM tenants WHERE id = %s", (tenant_id,))
+                tenant_row = cursor.fetchone()
+                tenant_novo_ativo = bool(tenant_row and tenant_row[0])
+
+                if (role != "admin" or not tenant_novo_ativo) and eh_unico_admin_ativo(cursor, user_id):
+                    erro = (
+                        "Não é possível remover a permissão de admin (ou movê-lo para um "
+                        "tenant inativo) sendo o único usuário admin ativo."
+                    )
                 else:
                     cursor.execute(
                         "UPDATE users SET name = %s, role = %s, tenant_id = %s WHERE id = %s",
@@ -499,22 +577,24 @@ def admin_usuarios():
                 conn.close()
 
     conn = get_conn()
-    cursor = dict_cursor(conn)
-    cursor.execute(
-        """
-        SELECT u.id, u.name, u.email, u.role, u.active, u.created_at,
-               t.id AS tenant_id, t.name AS tenant_name
-        FROM users u
-        JOIN tenants t ON t.id = u.tenant_id
-        ORDER BY t.name, u.name
-        """
-    )
-    usuarios = cursor.fetchall()
+    try:
+        cursor = dict_cursor(conn)
+        cursor.execute(
+            """
+            SELECT u.id, u.name, u.email, u.role, u.active, u.created_at,
+                   t.id AS tenant_id, t.name AS tenant_name
+            FROM users u
+            JOIN tenants t ON t.id = u.tenant_id
+            ORDER BY t.name, u.name
+            """
+        )
+        usuarios = cursor.fetchall()
 
-    cursor.execute("SELECT id, name FROM tenants WHERE active = true ORDER BY name")
-    tenants = cursor.fetchall()
-    cursor.close()
-    conn.close()
+        cursor.execute("SELECT id, name FROM tenants WHERE active = true ORDER BY name")
+        tenants = cursor.fetchall()
+        cursor.close()
+    finally:
+        conn.close()
 
     return render_template(
         "admin/usuarios.html",

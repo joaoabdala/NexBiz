@@ -36,8 +36,14 @@ HEADERS = {
     "Content-Type": "application/x-www-form-urlencoded",
 }
 
-MAX_TENTATIVAS = 3
-DELAY_RETRY    = 3
+# Valores baixos de propósito: essa consulta roda dentro de uma função
+# serverless (Vercel) com tempo de execução limitado (10s no plano Hobby).
+# Preferimos falhar rápido (o frontend já trata isso como "não foi possível
+# consultar o INPI") a estourar o timeout da própria função no meio de
+# várias tentativas.
+MAX_TENTATIVAS  = 1
+DELAY_RETRY     = 1
+TIMEOUT_REQUISICAO = 6
 
 
 # ──────────────────────────────────────────────
@@ -65,12 +71,12 @@ def iniciar_sessao() -> requests.Session:
     session = requests.Session()
     session.headers.update(HEADERS)
     # Pega cookie de sessão
-    session.get(BASE_URL + "/pePI/", timeout=20)
+    session.get(BASE_URL + "/pePI/", timeout=TIMEOUT_REQUISICAO)
     # Login anônimo (clica em "Continuar")
     session.post(
         URL_LOGIN + "?action=login",
         data={"T_Login": "", "T_Senha": "", "action": "login"},
-        timeout=20,
+        timeout=TIMEOUT_REQUISICAO,
         allow_redirects=True,
     )
     return session
@@ -104,7 +110,7 @@ def possui_marca_no_inpi(cnpj: str) -> bool:
                     "botao":           "pesquisar",
                 },
                 headers={**HEADERS, "Referer": BASE_URL + "/pePI/jsp/marcas/Pesquisa_titular.jsp"},
-                timeout=20,
+                timeout=TIMEOUT_REQUISICAO,
             )
             r.raise_for_status()
             r.encoding = "utf-8"

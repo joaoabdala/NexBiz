@@ -40,9 +40,10 @@ Crie um `.env` na raiz com:
 ```
 DATABASE_URL=postgresql://usuario:senha@host/banco?sslmode=require
 SECRET_KEY=<gerado com: python -c "import secrets; print(secrets.token_hex(32))">
+REDIS_URL=<URL de conexão do banco criado no Upstash>
 ```
 
-Use o endpoint **pooled** do Neon em `DATABASE_URL` (recomendado para ambientes serverless).
+Use o endpoint **pooled** do Neon em `DATABASE_URL` (recomendado para ambientes serverless). `REDIS_URL` é usado pelo rate limit do login (`Flask-Limiter`); sem ela a aplicação ainda funciona (cai para armazenamento em memória), mas isso não é confiável em produção na Vercel - ver seção Segurança.
 
 Instale as dependências:
 
@@ -76,7 +77,7 @@ Acessa em `http://localhost:5000`.
 
 ## Deploy na Vercel
 
-O deploy usa `api/index.py` (que importa o `app` do `app.py`) e as rotas definidas em `vercel.json`. Configure `DATABASE_URL` e `SECRET_KEY` como variáveis de ambiente no painel da Vercel (nunca commitadas no repositório).
+O deploy usa `api/index.py` (que importa o `app` do `app.py`) e as rotas definidas em `vercel.json`. Configure `DATABASE_URL`, `SECRET_KEY` e `REDIS_URL` como variáveis de ambiente no painel da Vercel (nunca commitadas no repositório). Sem `SECRET_KEY` configurada, a aplicação recusa subir na Vercel (falha rápido em vez de rodar com uma chave instável entre invocações).
 
 ## Migração de dados de referência (regime tributário / Lei do Bem)
 
@@ -94,12 +95,14 @@ O primeiro script lê credenciais de um `.env.migration` (não commitado) - só 
 - **admin:** acesso à tela `/admin` (CRUD de usuários e tenants).
 - **user:** acesso apenas à consulta de CNPJ.
 
-Todo usuário pertence a um tenant (empresa). Não é permitido desativar, excluir ou remover a role `admin` do único usuário admin ativo do sistema, para evitar perda total de acesso à administração.
+Todo usuário pertence a um tenant (empresa). Não é permitido desativar, excluir ou remover a role `admin` do único usuário admin ativo do sistema, nem mover esse admin para um tenant inativo, nem desativar o tenant que contém o único admin ativo - qualquer uma dessas ações causaria perda total de acesso à administração.
 
 ## Segurança
 
 - Senhas com hash (`werkzeug.security`), nunca em texto puro.
 - CSRF (`Flask-WTF`) em todos os formulários POST.
-- Rate limiting no login (`Flask-Limiter`) - em produção na Vercel, considere um backend compartilhado (ex.: Redis/Upstash), já que o armazenamento em memória não persiste entre invocações serverless.
+- Rate limiting no login (`Flask-Limiter`) com backend Redis (Upstash, via `REDIS_URL`) - necessário porque o armazenamento em memória padrão não é compartilhado entre invocações serverless.
+- Headers `X-Frame-Options`, `X-Content-Type-Options` e `Referrer-Policy` em todas as respostas.
 - Erros internos (banco, APIs externas) são logados no servidor e nunca expostos ao usuário.
 - Trilha de auditoria (`audit_log`) para ações administrativas.
+- As consultas ao INPI (scraping) usam timeout curto e uma única tentativa, para não estourar o tempo limite de execução da função serverless na Vercel.

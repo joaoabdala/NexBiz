@@ -8,7 +8,9 @@ import psycopg2.extras
 
 
 def get_conn():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    # connect_timeout evita que uma conexão travada com o Neon prenda a
+    # invocação inteira (importante em função serverless, com tempo limite).
+    return psycopg2.connect(os.environ["DATABASE_URL"], connect_timeout=10)
 
 
 def dict_cursor(conn):

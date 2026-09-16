@@ -46,8 +46,15 @@ HEADERS = {
     "Content-Type": "application/x-www-form-urlencoded",
 }
 
-MAX_TENTATIVAS = 3
-DELAY_RETRY    = 3
+# Valores baixos de propósito: essa consulta roda dentro de uma função
+# serverless (Vercel) com tempo de execução limitado (10s no plano Hobby).
+# Preferimos falhar rápido (o frontend já trata isso como "não foi possível
+# consultar o INPI") a estourar o timeout da própria função no meio de
+# várias tentativas - e essa aqui já faz até 2 buscas (exata + radical) por
+# tentativa, então o orçamento de tempo é ainda mais apertado.
+MAX_TENTATIVAS     = 1
+DELAY_RETRY        = 1
+TIMEOUT_REQUISICAO = 6
 
 
 # ──────────────────────────────────────────────
@@ -68,11 +75,11 @@ def eh_erro_servidor(texto: str) -> bool:
 def iniciar_sessao() -> requests.Session:
     session = requests.Session()
     session.headers.update(HEADERS)
-    session.get(BASE_URL + "/pePI/", timeout=20)
+    session.get(BASE_URL + "/pePI/", timeout=TIMEOUT_REQUISICAO)
     session.post(
         URL_LOGIN + "?action=login",
         data={"T_Login": "", "T_Senha": "", "action": "login"},
-        timeout=20,
+        timeout=TIMEOUT_REQUISICAO,
         allow_redirects=True,
     )
     return session
@@ -88,7 +95,7 @@ def debug_busca(nome: str):
     session = iniciar_sessao()
     payload = {**PAYLOAD_BASE, "marca": nome}
     print(f"Payload: {payload}")
-    r = session.post(URL_BUSCA, data=payload, headers=HEADERS, timeout=20)
+    r = session.post(URL_BUSCA, data=payload, headers=HEADERS, timeout=TIMEOUT_REQUISICAO)
     r.encoding = "utf-8"
     soup = BeautifulSoup(r.text, "html.parser")
     print(f"\nStatus: {r.status_code} | URL: {r.url}")
@@ -110,7 +117,7 @@ def _buscar(session: requests.Session, nome: str, exata: bool) -> bool:
         "buscaExata": "sim" if exata else "nao",
     }
 
-    r = session.post(URL_BUSCA, data=payload, headers=HEADERS, timeout=20)
+    r = session.post(URL_BUSCA, data=payload, headers=HEADERS, timeout=TIMEOUT_REQUISICAO)
     r.raise_for_status()
     r.encoding = "utf-8"
 
@@ -156,7 +163,6 @@ def possui_marca_por_nome(nome: str) -> bool:
                 return True
 
             # ── Busca radical ──
-            time.sleep(1)  # pequena pausa entre as duas requisições
             print("  Busca radical...")
             resultado_radical = _buscar(session, nome, exata=False)
             if resultado_radical is None:
