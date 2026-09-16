@@ -166,6 +166,10 @@ body {
     color: var(--cor-texto-primario) !important;
     margin: 0;
     min-height: 100vh;
+    /* 100dvh acompanha a barra de endereço dinâmica do Safari/iOS - sem
+       isso, 100vh é medido contra a tela cheia (barra escondida) e o
+       rodapé/conteúdo centralizado ficam descolados da tela visível. */
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     /* padding-top compensado por cada página individualmente */
@@ -871,36 +875,6 @@ footer .rodape-copy a:hover {
     text-decoration: underline;
 }
 
-footer .rodape-social a {
-    color: var(--cor-social-icon);
-    font-size: 16px;
-    text-decoration: none;
-    transition: color 0.15s ease;
-}
-
-footer .rodape-social a:hover {
-    color: var(--cor-social-icon-hover);
-}
-
-footer .btn-idioma {
-    font-size: 12px;
-    color: var(--cor-texto-inativo);
-    background: transparent;
-    border: 0.5px solid var(--cor-borda);
-    border-radius: 6px;
-    padding: 4px 10px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-footer .btn-idioma:hover {
-    border-color: var(--cor-borda-forte);
-    color: var(--cor-texto-secundario);
-}
-
 
 /* ─────────────────────────────────────────────────────────────
    13. TOGGLE DARK / LIGHT
@@ -979,16 +953,10 @@ footer .btn-idioma:hover {
 /* ─────────────────────────────────────────────────────────────
    15. PÁGINA DE LOGIN
    ─────────────────────────────────────────────────────────────
-   O card de login é centralizado na tela.
-   Não há navbar nem rodapé nessa página.
+   O card de login (e o radar decorativo) ficam centralizados no
+   espaço entre o topo e o rodapé - ver .login-conteudo no próprio
+   login.html, que define esse layout.
    ───────────────────────────────────────────────────────────── */
-
-/* Body específico do login - centralizado verticalmente */
-body.pagina-login {
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-}
 
 .login-card {
     background-color: var(--cor-fundo-navbar);
