@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<!--
+    index.html — Página principal de consulta de CNPJ
+    ──────────────────────────────────────────────────
+    Dependências:
+      - static/css/theme.css   → identidade visual (dark/light)
+      - Bootstrap 5.3          → grid, utilitários de layout
+      - Bootstrap Icons 1.10   → ícones de UI
+
+    Funcionalidades Flask mantidas:
+      - Consultar CNPJ (POST acao=consultar)
+      - Consulta INPI assíncrona (fetch /consulta-inpi/ e /consulta-inpi-nome/)
+      - Timeout de sessão por inatividade (30 minutos)
+      - Mapa Google Maps embed
+
+    Tema:
+      Padrão "dark". Toggle no navbar. Preferência salva no localStorage
+      (chave "tema-afa") compartilhada com login.html.
+-->
+<html lang="pt-br" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consultar CNPJ — Abdala Nexus</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
+
+    <!-- Google Fonts: Inter (pesos 400 e 500) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- ► Identidade visual do projeto -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+
+    <!-- Bootstrap CSS — carregado DEPOIS do theme.css para que nossos !important vençam -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!--
+        Script inline de tema — DEVE ficar aqui no <head>, antes de qualquer CSS.
+        Lê a preferência salva no localStorage e aplica o data-theme no <html>
+        ANTES da página ser pintada, evitando o flash branco inicial.
+    -->
+    <script>
+        (function() {
+            var tema = localStorage.getItem('tema-afa') || 'dark';
+            document.documentElement.setAttribute('data-theme', tema);
+        })();
+    </script>
+
+    <style>
+        /*
+            Estilos de layout específicos desta página.
+            Cores e componentes ficam no theme.css.
+        */
+
+        /*
+            Override explícito do body — necessário porque o Bootstrap redefine
+            background-color e color do body com alta especificidade.
+            Estes valores espelham as variáveis do theme.css para dark e light.
+        */
+        [data-theme="dark"] body {
+            background-color: #0A0F1E !important;
+            color: #E8EEF7 !important;
+        }
+        [data-theme="light"] body {
+            background-color: #F7F9FC !important;
+            color: #111827 !important;
+        }
+
+        /* Espaço para a navbar fixa de 56px */
+        body {
+            padding-top: 56px;
+        }
+
+        /* A navbar deve ter z-index alto para sobrepor o conteúdo */
+        .navbar-custom {
+            z-index: 1030;
+        }
+
+        /* Container principal com espaço vertical generoso */
+        .conteudo-principal {
+            padding: 2rem 0 3rem;
+            flex: 1;
+        }
+
+        /* Título de cada bloco de resultado */
+        h4.titulo-resultado {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--cor-texto-primario);
+            margin: 0 0 1rem;
+        }
+
+        /* Link "Admin" no menu de perfil — mesmo padrão do link-logout */
+        .navbar-perfil a.link-admin {
+            color: var(--cor-acento);
+            text-decoration: none;
+            font-size: 11px;
+        }
+        .navbar-perfil a.link-admin:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ══════════════════════════════════════════════════════════
+         NAVBAR FIXA
+         ══════════════════════════════════════════════════════════ -->
+    <nav class="navbar navbar-expand-md fixed-top navbar-custom" aria-label="Navegação principal">
+        <div class="container-fluid position-relative px-3">
+
+            <!-- Esquerda: logo Abdala Nexus -->
+            <a class="navbar-logo-texto" href="{{ url_for('index') }}">
+                Abdala Nexus<span class="navbar-logo-ponto">.</span>
+            </a>
+
+            <!-- Centro: título da ferramenta (posicionamento absoluto) -->
+            <span class="navbar-titulo position-absolute start-50 translate-middle-x d-none d-md-block">
+                Consultar CNPJ
+            </span>
+
+            <!-- Direita: toggle de tema + perfil do usuário + botão mobile -->
+            <div class="d-flex align-items-center gap-3 ms-auto">
+
+                <!-- Botão de alternância de tema -->
+                <button id="btn-tema" aria-label="Alternar tema">
+                    <i class="bi bi-sun" id="icone-tema"></i>
+                    <span id="texto-tema" class="d-none d-sm-inline">Claro</span>
+                </button>
+
+                <!-- Perfil (colapsa em mobile) -->
+                <button
+                    class="navbar-toggler border-0 p-0"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#navbarPerfil"
+                    aria-controls="navbarPerfil"
+                    aria-expanded="false"
+                    aria-label="Abrir menu">
+                    <i class="bi bi-person-circle" style="font-size: 20px; color: var(--cor-texto-secundario);"></i>
+                </button>
+
+                <!-- Informações do usuário (visíveis em desktop, colapsa em mobile) -->
+                <div class="collapse navbar-collapse justify-content-end" id="navbarPerfil">
+                    <div class="navbar-perfil">
+                        {{ nome_usuario }}<br>
+                        {% if is_admin %}
+                            <a href="{{ url_for('admin_usuarios') }}" class="link-admin">Admin</a>
+                            ·
+                        {% endif %}
+                        <a href="{{ url_for('logout') }}" class="link-logout">Sair</a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </nav>
+    <!-- /.navbar -->
+
+
+    <!-- ══════════════════════════════════════════════════════════
+         CONTEÚDO PRINCIPAL
+         ══════════════════════════════════════════════════════════ -->
+    <main class="container conteudo-principal">
+
+
+        <!-- ────────────────────────────────────────────────────
+             FORMULÁRIO DE CONSULTA
+             ────────────────────────────────────────────────────
+             O form envia POST com o campo "acao" para indicar
+             qual operação o servidor deve executar.
+             ─────────────────────────────────────────────────── -->
+        <section id="consulta-form" aria-label="Formulário de consulta">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-consulta-wrapper">
+
+                    <div class="row g-3 align-items-end">
+
+                        <!-- Campo CNPJ -->
+                        <div class="col-12 col-md-7 col-lg-5">
+                            <label for="cnpj" class="form-label campo-label">
+                                CNPJ
+                            </label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="cnpj"
+                                name="cnpj"
+                                value="{{ cnpj or '' }}"
+                                placeholder="Apenas números — ex: 04252011000110"
+                                maxlength="18"
+                                autocomplete="off"
+                                required
+                            >
+                        </div>
+
+                        <!-- Botões de ação -->
+                        <div class="col-12 col-md-auto">
+                            <div class="acoes-formulario d-flex flex-wrap gap-2">
+
+                                <!-- Consultar — sempre visível -->
+                                <button type="submit" name="acao" value="consultar" class="btn-primario">
+                                    <i class="bi bi-search me-1"></i> Consultar
+                                </button>
+
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+                <!-- /.form-consulta-wrapper -->
+
+            </form>
+        </section>
+
+
+        <!-- ────────────────────────────────────────────────────
+             MENSAGENS DE FEEDBACK
+             ────────────────────────────────────────────────────
+             Exibidas pelo Flask após cada ação.
+             ─────────────────────────────────────────────────── -->
+        <section id="mensagens" aria-live="polite">
+
+            {% if erro %}
+                <div class="msg-base msg-erro" role="alert">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    {{ erro }}
+                </div>
+            {% endif %}
+
+        </section>
+
+
+        <!-- ════════════════════════════════════════════════════
+             RESULTADO DA CONSULTA
+             Exibido apenas quando o Flask retorna `resultado`.
+             ════════════════════════════════════════════════════ -->
+        {% if resultado %}
+        <section id="resultado" aria-label="Dados da empresa" class="mt-2">
+
+
+            <!-- ────────────────────────────────────────────────
+                 DADOS PRINCIPAIS — dois cards lado a lado
+                 ─────────────────────────────────────────────── -->
+            <h4 class="titulo-resultado">Dados retornados da Receita</h4>
+
+            <div class="row g-3">
+
+                <!-- Card 1: identificação e contato -->
+                <div class="col-12 col-lg-6">
+                    <div class="card-resultado">
+                        <div class="card-resultado-header">Identificação</div>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <strong>Nome</strong>
+                                <span>{{ resultado.nome }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>CNPJ</strong>
+                                <span class="texto-mono">{{ resultado.cnpj }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Fantasia</strong>
+                                <span>{{ resultado.fantasia or '—' }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Situação</strong>
+                                <!--
+                                    Tag de situação: "ATIVA" → verde, qualquer outro → vermelho.
+                                    Se quiser adicionar mais situações, crie novas classes
+                                    .tag-* no theme.css.
+                                -->
+                                <span class="tag {% if resultado.situacao == 'ATIVA' %}tag-ativa{% else %}tag-inativa{% endif %}">
+                                    {{ resultado.situacao }}
+                                </span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Telefone</strong>
+                                <span>{{ resultado.telefone or '—' }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>E-mail</strong>
+                                <span>{{ resultado.email or '—' }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Tributação</strong>
+                                <span>{{ msg_tp_tributacao }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Lei do Bem</strong>
+                                <span>{{ msg_lei_do_bem }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>INPI por CNPJ</strong>
+                                <!--
+                                    Preenchido de forma assíncrona pelo JS abaixo.
+                                    O spinner é exibido até a resposta chegar.
+                                -->
+                                <span id="inpi-resultado">
+                                    <span class="inpi-loading">
+                                        <span class="inpi-spinner"></span>
+                                        Consultando INPI...
+                                    </span>
+                                </span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>INPI por Nome</strong>
+                                <span id="inpi-nome-resultado">
+                                    <span class="inpi-loading">
+                                        <span class="inpi-spinner"></span>
+                                        Consultando INPI...
+                                    </span>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Card 2: dados societários e Simples -->
+                <div class="col-12 col-lg-6">
+                    <div class="card-resultado">
+                        <div class="card-resultado-header">Dados societários</div>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <strong>Abertura</strong>
+                                <span>{{ resultado.abertura }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>UF</strong>
+                                <span>{{ resultado.uf }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Capital Social</strong>
+                                <!--
+                                    Formatação BR: 1234567.89 → R$ 1.234.567,89
+                                    O filtro |float converte a string antes de formatar.
+                                -->
+                                <span class="valor">
+                                    {% set v = resultado.capital_social | float %}
+                                    R$ {{ "{:,.2f}".format(v).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                </span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Natureza Jurídica</strong>
+                                <span>{{ resultado.natureza_juridica }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Simples — Optante</strong>
+                                <span class="tag {% if resultado.simples.optante %}tag-ativa{% else %}tag-inativa{% endif %}">
+                                    {{ 'Sim' if resultado.simples.optante else 'Não' }}
+                                </span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Simples — Início</strong>
+                                <span>{{ resultado.simples.data_opcao if resultado.simples.data_opcao else '—' }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Simples — Saída</strong>
+                                <span>{{ resultado.simples.data_exclusao if resultado.simples.data_exclusao else '—' }}</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Simples — Atualização</strong>
+                                <span>{{ resultado.simples.ultima_atualizacao_formatada }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+            <!-- /.row dados principais -->
+
+
+            <!-- ────────────────────────────────────────────────
+                 MAPA DE LOCALIZAÇÃO
+                 Exibido apenas quando há logradouro no resultado.
+                 ─────────────────────────────────────────────── -->
+            {% if resultado.logradouro %}
+
+                {# Monta o endereço completo para a URL do Google Maps #}
+                {% set endereco_maps = [
+                    resultado.logradouro | default(''),
+                    resultado.numero     | default(''),
+                    resultado.bairro     | default(''),
+                    resultado.municipio  | default(''),
+                    resultado.uf         | default(''),
+                    resultado.cep        | default('')
+                ] | join(' ') | urlencode %}
+
+                <div class="secao-titulo">Localização</div>
+
+                <div class="mapa-endereco">
+                    <i class="bi bi-geo-alt-fill"></i>
+                    <span>
+                        {{ resultado.logradouro }}{% if resultado.numero %}, {{ resultado.numero }}{% endif %}
+                        {% if resultado.complemento %} · {{ resultado.complemento }}{% endif %}
+                        · {{ resultado.bairro }}, {{ resultado.municipio }}/{{ resultado.uf }}
+                        · CEP {{ resultado.cep }}
+                    </span>
+                </div>
+
+                <div class="mapa-wrapper">
+                    <div class="ratio" style="--bs-aspect-ratio: 38%; min-height: 260px;">
+                        <iframe
+                            src="https://maps.google.com/maps?q={{ endereco_maps }}&output=embed&hl=pt-BR&z=16"
+                            width="100%"
+                            height="100%"
+                            style="border: 0;"
+                            allowfullscreen
+                            loading="lazy"
+                            referrerpolicy="no-referrer-when-downgrade"
+                            title="Localização da empresa no Google Maps">
+                        </iframe>
+                    </div>
+                </div>
+
+            {% endif %}
+            <!-- /mapa -->
+
+
+            <!-- ────────────────────────────────────────────────
+                 SÓCIOS (QSA)
+                 ─────────────────────────────────────────────── -->
+            <div class="secao-titulo">Sócios</div>
+
+            {% if resultado.qsa %}
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                    {% for socio in resultado.qsa %}
+                        <div class="col">
+                            <div class="card-socio">
+                                <h6>{{ socio.nome }}</h6>
+                                <p>{{ socio.qual }}</p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="msg-vazio">Nenhum sócio encontrado.</div>
+            {% endif %}
+
+
+            <!-- ────────────────────────────────────────────────
+                 CNAE PRINCIPAL
+                 ─────────────────────────────────────────────── -->
+            <div class="secao-titulo">Atividade Principal</div>
+
+            {% if resultado.atividade_principal %}
+                <div class="row row-cols-1 row-cols-md-2 g-3">
+                    {% for atividade in resultado.atividade_principal %}
+                        <div class="col">
+                            <div class="card-cnae">
+                                <h6 class="texto-mono">{{ atividade.code }}</h6>
+                                <p>{{ atividade.text }}</p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="msg-vazio">Nenhuma atividade principal encontrada.</div>
+            {% endif %}
+
+
+            <!-- ────────────────────────────────────────────────
+                 CNAE SECUNDÁRIO
+                 ─────────────────────────────────────────────── -->
+            <div class="secao-titulo">Atividades Secundárias</div>
+
+            {% if resultado.atividades_secundarias %}
+                <div class="row row-cols-1 row-cols-md-2 g-3">
+                    {% for atividade in resultado.atividades_secundarias %}
+                        <div class="col">
+                            <div class="card-cnae">
+                                <h6 class="texto-mono">{{ atividade.code }}</h6>
+                                <p>{{ atividade.text }}</p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="msg-vazio">Nenhuma atividade secundária encontrada.</div>
+            {% endif %}
+
+
+        </section>
+        {% endif %}
+        <!-- /resultado -->
+
+
+    </main>
+    <!-- /main -->
+
+
+    <!-- ══════════════════════════════════════════════════════════
+         RODAPÉ
+         ══════════════════════════════════════════════════════════ -->
+    <footer class="py-2">
+        <div class="container-fluid">
+            <div class="row align-items-center py-1">
+
+                <!-- Esquerda: seletor de idioma (decorativo, sem funcionalidade) -->
+                <div class="col text-start ps-4">
+                    <button class="btn-idioma" aria-label="Idioma: Português Brasil">
+                        <i class="bi bi-globe"></i>
+                        Português (Brasil)
+                        <i class="bi bi-caret-down-fill" style="font-size: 10px;"></i>
+                    </button>
+                </div>
+
+                <!-- Centro: copyright -->
+                <div class="col text-center">
+                    <span class="rodape-copy">&copy; 2026 Abdala Nexus</span>
+                </div>
+
+                <!-- Direita: reservado para redes sociais da Abdala Nexus -->
+                <div class="col text-end pe-4 rodape-social"></div>
+
+            </div>
+        </div>
+    </footer>
+
+
+    <!-- ══════════════════════════════════════════════════════════
+         SCRIPTS
+         ══════════════════════════════════════════════════════════ -->
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+
+    <!-- ─────────────────────────────────────────────────────────
+         TOGGLE DE TEMA (reutilizado do login.html)
+         ─────────────────────────────────────────────────────────
+         Mesma lógica do login: lê "tema-afa" do localStorage,
+         aplica ao data-theme, atualiza ícone e texto do botão.
+         ───────────────────────────────────────────────────────── -->
+    <script>
+        (function () {
+            const CHAVE_STORAGE = 'tema-afa';
+            const html          = document.documentElement;
+            const btnTema       = document.getElementById('btn-tema');
+            const iconeTema     = document.getElementById('icone-tema');
+            const textoTema     = document.getElementById('texto-tema');
+
+            // Preferência salva ou padrão "dark"
+            const temaInicial = localStorage.getItem(CHAVE_STORAGE) || 'dark';
+            aplicarTema(temaInicial);
+
+            btnTema.addEventListener('click', function () {
+                const temaAtual = html.getAttribute('data-theme');
+                const novoTema  = temaAtual === 'dark' ? 'light' : 'dark';
+                aplicarTema(novoTema);
+                localStorage.setItem(CHAVE_STORAGE, novoTema);
+            });
+
+            function aplicarTema(tema) {
+                html.setAttribute('data-theme', tema);
+                if (tema === 'dark') {
+                    iconeTema.className  = 'bi bi-sun';
+                    textoTema.textContent = 'Claro';
+                } else {
+                    iconeTema.className  = 'bi bi-moon-stars';
+                    textoTema.textContent = 'Escuro';
+                }
+            }
+        })();
+    </script>
+
+
+    <!-- ─────────────────────────────────────────────────────────
+         CONSULTA INPI (assíncrona)
+         ─────────────────────────────────────────────────────────
+         Executada apenas quando há resultado da Receita na página.
+         Dois fetch paralelos:
+           1. /consulta-inpi/<cnpj>        → busca por CNPJ
+           2. /consulta-inpi-nome/<nome>   → busca por nome/fantasia
+         Os elementos #inpi-resultado e #inpi-nome-resultado são
+         atualizados com o retorno ou mensagem de erro.
+         ───────────────────────────────────────────────────────── -->
+    {% if resultado %}
+    <script>
+        (function () {
+            var cnpj     = "{{ cnpj }}";
+            var fantasia = "{{ resultado.fantasia or '' }}".trim();
+            // Usa fantasia se disponível; senão usa o nome da empresa
+            var nomeEncoded = encodeURIComponent(fantasia || "{{ resultado.nome }}");
+
+            // ── 1. Consulta INPI por CNPJ ──────────────────────
+            var elCnpj = document.getElementById('inpi-resultado');
+            if (elCnpj) {
+                fetch('/consulta-inpi/' + cnpj)
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) {
+                        if (data.erro) {
+                            elCnpj.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                        } else if (data.possui_marca) {
+                            elCnpj.innerHTML = '<span class="inpi-positivo"><i class="bi bi-check-circle me-1"></i>Possui marca registrada</span>';
+                        } else {
+                            elCnpj.innerHTML = '<span class="inpi-negativo"><i class="bi bi-dash-circle me-1"></i>Sem marca registrada</span>';
+                        }
+                    })
+                    .catch(function () {
+                        elCnpj.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                    });
+            }
+
+            // ── 2. Consulta INPI por Nome ───────────────────────
+            var elNome = document.getElementById('inpi-nome-resultado');
+            if (elNome) {
+                fetch('/consulta-inpi-nome/' + nomeEncoded)
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) {
+                        if (data.erro) {
+                            elNome.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                        } else if (data.possui_marca) {
+                            elNome.innerHTML = '<span class="inpi-positivo"><i class="bi bi-check-circle me-1"></i>Marca encontrada pelo nome</span>';
+                        } else {
+                            elNome.innerHTML = '<span class="inpi-negativo"><i class="bi bi-dash-circle me-1"></i>Nenhuma marca encontrada pelo nome</span>';
+                        }
+                    })
+                    .catch(function () {
+                        elNome.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                    });
+            }
+        })();
+    </script>
+    {% endif %}
+
+
+    <!-- ─────────────────────────────────────────────────────────
+         TIMEOUT DE SESSÃO POR INATIVIDADE
+         ─────────────────────────────────────────────────────────
+         Após 30 minutos sem interação (clique, teclado ou toque),
+         redireciona o usuário para o logout e exibe um alerta.
+         Os eventos escutados cobrem mouse, teclado e dispositivos
+         touch. O timer é reiniciado a cada evento detectado.
+         ───────────────────────────────────────────────────────── -->
+    <script>
+        (function () {
+            const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos em milissegundos
+            let timer;
+
+            function aoExpirar() {
+                alert('Sua sessão expirou por inatividade. Você será redirecionado ao login.');
+                window.location.href = "{{ url_for('logout') }}";
+            }
+
+            function reiniciarTimer() {
+                clearTimeout(timer);
+                timer = setTimeout(aoExpirar, TIMEOUT_MS);
+            }
+
+            // Eventos que indicam atividade do usuário
+            ['load', 'click', 'keypress', 'touchstart', 'mousemove'].forEach(function (evento) {
+                window.addEventListener(evento, reiniciarTimer, true);
+            });
+
+            // Inicia o timer ao carregar a página
+            reiniciarTimer();
+        })();
+    </script>
+
+
+</body>
+</html>

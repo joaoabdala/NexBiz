@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<!--
+    login.html — Página de login do sistema Consultar CNPJ
+    ───────────────────────────────────────────────────────
+    Dependências:
+      - static/css/theme.css   → identidade visual (dark/light)
+      - Bootstrap 5.3          → tooltips (apenas para o ícone de dica)
+      - Bootstrap Icons 1.10   → ícone bi-info-circle e bi-sun/bi-moon
+
+    Tema:
+      O tema padrão é "dark". O usuário pode alternar com o botão
+      no canto superior direito. A preferência é salva no localStorage
+      (chave: "tema-afa") e compartilhada com o index.html.
+-->
+<html lang="pt-br" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Abdala Nexus</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
+
+    <!-- Google Fonts: Inter (pesos 400 e 500) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap Icons (usados no tooltip e no botão de tema) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- ► Identidade visual do projeto — todas as cores e estilos ficam aqui -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+
+    <!-- Bootstrap CSS — carregado DEPOIS do theme.css para que nossos !important vençam -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!--
+        Script inline de tema — DEVE ficar aqui no <head>, antes de qualquer CSS.
+        Lê a preferência salva no localStorage e aplica o data-theme no <html>
+        ANTES da página ser pintada, evitando o flash branco inicial.
+    -->
+    <script>
+        (function() {
+            var tema = localStorage.getItem('tema-afa') || 'dark';
+            document.documentElement.setAttribute('data-theme', tema);
+        })();
+    </script>
+
+    <style>
+        /*
+            Estilos específicos desta página que não fazem sentido
+            no tema global (posicionamento do toggle, por ex.).
+        */
+
+        /*
+            Override explícito do body — necessário porque o Bootstrap redefine
+            background-color do body. Espelha as variáveis do theme.css.
+        */
+        [data-theme="dark"] body {
+            background-color: #0A0F1E !important;
+            color: #E8EEF7 !important;
+        }
+        [data-theme="light"] body {
+            background-color: #F7F9FC !important;
+            color: #111827 !important;
+        }
+
+        /* Centraliza o card e remove padding lateral em mobile */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        /* Posiciona o botão de tema no canto superior direito do card */
+        .login-card-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-tema-toggle {
+            position: absolute;
+            top: -40px;
+            right: 0;
+        }
+
+        /* Espaçamento entre campos do formulário */
+        .campo-grupo {
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ══════════════════════════════════════════════════════════
+         WRAPPER DO CARD (posiciona o toggle de tema acima do card)
+         ══════════════════════════════════════════════════════════ -->
+    <div class="login-card-wrapper">
+
+        <!-- Botão de alternância de tema (dark ↔ light) -->
+        <div class="login-tema-toggle">
+            <button id="btn-tema" aria-label="Alternar tema">
+                <!-- O ícone e o texto são trocados pelo JS abaixo -->
+                <i class="bi bi-sun" id="icone-tema"></i>
+                <span id="texto-tema">Claro</span>
+            </button>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             CARD DE LOGIN
+             ══════════════════════════════════════════════════════ -->
+        <div class="login-card">
+
+            <!-- Marca: logo Abdala Nexus + nome da ferramenta -->
+            <div class="login-marca">
+
+                <!-- Logo Abdala Nexus -->
+                <img
+                    src="{{ url_for('static', filename='images/abdala-nexus-logo.png') }}"
+                    alt="Abdala Nexus"
+                    class="login-logo-img"
+                >
+
+                <!-- Nome da ferramenta com ponto ciano como acento -->
+                <span class="login-marca-nome">
+                    Consultar CNPJ<span class="login-marca-ponto">.</span>
+                </span>
+                <span class="login-marca-subtitulo">Abdala Nexus</span>
+            </div>
+
+            <!-- Mensagem de erro (exibida pelo Flask quando login falha) -->
+            {% if erro %}
+                <div class="msg-base msg-erro" role="alert">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    {{ erro }}
+                </div>
+            {% endif %}
+
+            <!-- Formulário de login -->
+            <form method="POST" novalidate>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <!-- Campo: E-mail -->
+                <div class="campo-grupo">
+                    <label for="email" class="campo-label">E-mail</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        placeholder="seu.email@empresa.com"
+                        autocomplete="username"
+                        required
+                    >
+                </div>
+
+                <!-- Campo: Senha -->
+                <div class="campo-grupo">
+                    <label for="senha" class="campo-label">Senha</label>
+                    <input
+                        type="password"
+                        id="senha"
+                        name="senha"
+                        placeholder="••••••••"
+                        autocomplete="current-password"
+                        required
+                    >
+                </div>
+
+                <!-- Botão de submit -->
+                <button type="submit" class="btn-entrar">
+                    Entrar
+                </button>
+
+            </form>
+        </div>
+        <!-- /.login-card -->
+
+    </div>
+    <!-- /.login-card-wrapper -->
+
+
+    <!-- ══════════════════════════════════════════════════════════
+         SCRIPTS
+         ══════════════════════════════════════════════════════════ -->
+
+    <!-- Bootstrap JS — necessário para o Tooltip do campo Usuário -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        /* ─────────────────────────────────────────────────────────
+           TOGGLE DE TEMA (dark / light)
+           ─────────────────────────────────────────────────────────
+           Lê a preferência do localStorage na chave "tema-afa".
+           Se não houver preferência salva, aplica "dark" (padrão).
+           Ao clicar no botão, alterna o data-theme do <html> e
+           salva a nova preferência.
+           ───────────────────────────────────────────────────────── */
+        (function () {
+            const CHAVE_STORAGE = 'tema-afa';   // chave compartilhada com index.html
+            const html          = document.documentElement;
+            const btnTema       = document.getElementById('btn-tema');
+            const iconeTema     = document.getElementById('icone-tema');
+            const textoTema     = document.getElementById('texto-tema');
+
+            // Lê preferência salva; padrão é "dark"
+            const temaInicial = localStorage.getItem(CHAVE_STORAGE) || 'dark';
+            aplicarTema(temaInicial);
+
+            // Evento de clique no botão
+            btnTema.addEventListener('click', function () {
+                const temaAtual = html.getAttribute('data-theme');
+                const novoTema  = temaAtual === 'dark' ? 'light' : 'dark';
+                aplicarTema(novoTema);
+                localStorage.setItem(CHAVE_STORAGE, novoTema);
+            });
+
+            /**
+             * Aplica o tema ao <html> e atualiza ícone + texto do botão.
+             * @param {string} tema — "dark" ou "light"
+             */
+            function aplicarTema(tema) {
+                html.setAttribute('data-theme', tema);
+
+                if (tema === 'dark') {
+                    // Mostrando dark → botão oferece trocar para claro
+                    iconeTema.className = 'bi bi-sun';
+                    textoTema.textContent = 'Claro';
+                } else {
+                    // Mostrando light → botão oferece trocar para escuro
+                    iconeTema.className = 'bi bi-moon-stars';
+                    textoTema.textContent = 'Escuro';
+                }
+            }
+        })();
+
+        /* ─────────────────────────────────────────────────────────
+           TOOLTIPS DO BOOTSTRAP
+           ─────────────────────────────────────────────────────────
+           Inicializa todos os elementos com data-bs-toggle="tooltip".
+           ───────────────────────────────────────────────────────── */
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+            new bootstrap.Tooltip(el);
+        });
+    </script>
+
+</body>
+</html>

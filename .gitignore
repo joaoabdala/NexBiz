@@ -1,0 +1,23 @@
+# Segredos — nunca versionar
+.env
+.env.migration
+.env.local
+
+# Dados extraídos do banco legado (podem conter dados sensíveis de clientes)
+data/*.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Logs
+*.log
+
+# Build (PyInstaller)
+build/
+dist/
+
+# Vercel
+.vercel/

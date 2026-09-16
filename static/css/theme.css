@@ -1,0 +1,900 @@
+/* =============================================================
+   theme.css — Identidade Visual LegalTech — Abdala Nexus Consultar CNPJ
+   =============================================================
+
+   ESTRUTURA DESTE ARQUIVO
+   ───────────────────────
+   1. Variáveis de tema (dark e light)
+   2. Reset e base
+   3. Tipografia
+   4. Navbar
+   5. Formulário de consulta
+   6. Botões
+   7. Mensagens (alertas)
+   8. Cards de resultado
+   9. Tags / badges
+   10. Mapa
+   11. Sócios e CNAEs
+   12. Rodapé
+   13. Toggle dark/light
+   14. Spinner INPI
+   15. Página de login
+   16. Responsividade mobile
+
+   COMO FUNCIONA O TEMA
+   ────────────────────
+   O atributo `data-theme` na tag <html> controla o tema ativo.
+   Valor padrão: "dark"   →   mude para "light" via JS (toggle).
+   O JS salva a preferência no localStorage para persistir entre páginas.
+
+   Para adicionar novos componentes:
+   - Defina cores usando as variáveis de --cor-*, nunca hex fixo.
+   - Isso garante que o componente funcione automaticamente nos dois modos.
+
+   ============================================================= */
+
+
+/* ─────────────────────────────────────────────────────────────
+   1. VARIÁVEIS DE TEMA
+   ─────────────────────────────────────────────────────────────
+   Cada variável existe nos dois seletores abaixo.
+   [data-theme="dark"]  → tema escuro (padrão)
+   [data-theme="light"] → tema claro
+   ───────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] {
+    /* Fundos */
+    --cor-fundo-pagina:      #0A0F1E;   /* fundo da página inteira */
+    --cor-fundo-navbar:      #0D1425;   /* navbar e login card */
+    --cor-fundo-card:        #161D30;   /* cards de dados */
+    --cor-fundo-input:       #161D30;   /* inputs */
+    --cor-fundo-hover:       #1E2845;   /* hover de itens de lista */
+
+    /* Bordas */
+    --cor-borda:             rgba(0, 212, 255, 0.18);  /* borda padrão */
+    --cor-borda-forte:       rgba(0, 212, 255, 0.35);  /* borda em foco */
+    --cor-borda-divisor:     rgba(255, 255, 255, 0.07); /* divisores sutis */
+
+    /* Textos */
+    --cor-texto-primario:    #E8EEF7;   /* títulos e conteúdo principal */
+    --cor-texto-secundario:  #7A8BA0;   /* labels, metadados */
+    --cor-texto-inativo:     #4A5568;   /* placeholders, CNPJ cinza */
+
+    /* Acento (ciano) */
+    --cor-acento:            #00D4FF;   /* botão primário, logo, foco */
+    --cor-acento-texto:      #0A0F1E;   /* texto sobre fundo ciano */
+    --cor-acento-fundo:      rgba(0, 212, 255, 0.10); /* fundo sutil ciano */
+
+    /* Status */
+    --cor-sucesso:           #5DCAA5;
+    --cor-sucesso-fundo:     rgba(93, 202, 165, 0.12);
+    --cor-erro:              #E24B4A;
+    --cor-erro-fundo:        rgba(226, 75, 74, 0.12);
+    --cor-aviso:             #EF9F27;
+    --cor-aviso-fundo:       rgba(239, 159, 39, 0.12);
+    --cor-info-fundo:        rgba(0, 212, 255, 0.10);
+    --cor-info-texto:        #00D4FF;
+
+    /* Navbar logout */
+    --cor-logout:            #E24B4A;
+
+    /* Rodapé */
+    --cor-rodape-texto:      #4A5568;
+    --cor-rodape-borda:      rgba(255,255,255,0.07);
+    --cor-social-icon:       #4A5568;
+    --cor-social-icon-hover: #7A8BA0;
+
+    /* Sombra do card de login */
+    --sombra-login:          0 8px 40px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="light"] {
+    /* Fundos */
+    --cor-fundo-pagina:      #F7F9FC;
+    --cor-fundo-navbar:      #FFFFFF;
+    --cor-fundo-card:        #FFFFFF;
+    --cor-fundo-input:       #FFFFFF;
+    --cor-fundo-hover:       #F0F4FA;
+
+    /* Bordas */
+    --cor-borda:             #DDE3ED;
+    --cor-borda-forte:       #00A8CC;
+    --cor-borda-divisor:     #E8EDF4;
+
+    /* Textos */
+    --cor-texto-primario:    #111827;
+    --cor-texto-secundario:  #6B7280;
+    --cor-texto-inativo:     #9CA3AF;
+
+    /* Acento */
+    --cor-acento:            #00A8CC;   /* ligeiramente mais escuro no light para contraste */
+    --cor-acento-texto:      #FFFFFF;
+    --cor-acento-fundo:      #EEF9FC;
+
+    /* Status */
+    --cor-sucesso:           #065F46;
+    --cor-sucesso-fundo:     #D1FAE5;
+    --cor-erro:              #991B1B;
+    --cor-erro-fundo:        #FEE2E2;
+    --cor-aviso:             #92400E;
+    --cor-aviso-fundo:       #FEF3C7;
+    --cor-info-fundo:        #EEF9FC;
+    --cor-info-texto:        #0369A1;
+
+    /* Navbar logout */
+    --cor-logout:            #DC2626;
+
+    /* Rodapé */
+    --cor-rodape-texto:      #9CA3AF;
+    --cor-rodape-borda:      #E8EDF4;
+    --cor-social-icon:       #9CA3AF;
+    --cor-social-icon-hover: #374151;
+
+    /* Sombra do card de login */
+    --sombra-login:          0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   2. RESET E BASE
+   ─────────────────────────────────────────────────────────────
+   Aplicado ao html e body. Qualquer novo componente deve usar
+   as variáveis --cor-* definidas acima.
+   ───────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    /* Transição suave ao trocar de tema */
+    transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color: var(--cor-fundo-pagina) !important;
+    color: var(--cor-texto-primario) !important;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    /* padding-top compensado por cada página individualmente */
+}
+
+/* Remove o fundo padrão do Bootstrap em elementos que dependem de tema */
+.list-group-item {
+    background-color: var(--cor-fundo-card) !important;
+    color: var(--cor-texto-primario) !important;
+    border-color: var(--cor-borda) !important;
+    transition: background-color 0.15s ease;
+}
+
+.list-group-item:hover {
+    background-color: var(--cor-fundo-hover) !important;
+}
+
+/* Scrollbar discreta no dark mode */
+[data-theme="dark"] ::-webkit-scrollbar { width: 6px; }
+[data-theme="dark"] ::-webkit-scrollbar-track { background: #0D1425; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #1E2845; border-radius: 3px; }
+
+
+/* ─────────────────────────────────────────────────────────────
+   3. TIPOGRAFIA
+   ─────────────────────────────────────────────────────────────
+   Escala de tamanhos usada no projeto:
+     - Título de seção (h4/h5): 16–18px, weight 500
+     - Label de campo: 13px, weight 500
+     - Conteúdo de lista: 14px, weight 400
+     - CNPJ / códigos: font-mono, 13px
+     - Metadados: 12px, cor secundária
+   ───────────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 500;
+    color: var(--cor-texto-primario);
+    letter-spacing: -0.01em;
+}
+
+/* Seções de resultado (Sócios, CNAE, etc.) */
+.secao-titulo {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--cor-texto-secundario);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 2rem 0 1rem;
+    padding-bottom: 8px;
+    border-bottom: 0.5px solid var(--cor-borda-divisor);
+}
+
+/* Valor em destaque (ex: Capital Social) */
+.valor-destaque {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--cor-texto-primario);
+}
+
+/* Código/CNPJ em fonte monoespaçada */
+.texto-mono {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    color: var(--cor-texto-inativo);
+    letter-spacing: 0.02em;
+}
+
+/* Label de campo de formulário */
+.campo-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--cor-texto-secundario);
+    margin-bottom: 6px;
+    display: block;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   4. NAVBAR
+   ─────────────────────────────────────────────────────────────
+   Sobrescreve o .navbar-custom do Bootstrap.
+   A classe .navbar-custom é mantida nos templates para
+   compatibilidade; aqui redefinimos sua aparência.
+   ───────────────────────────────────────────────────────────── */
+
+.navbar-custom {
+    background-color: var(--cor-fundo-navbar) !important;
+    border-bottom: 0.5px solid var(--cor-borda);
+    height: 56px;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Logo: "Abdala Nexus." — o ponto é o acento ciano */
+.navbar-logo-texto {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--cor-texto-primario);
+    letter-spacing: -0.02em;
+    text-decoration: none;
+}
+
+.navbar-logo-ponto {
+    color: var(--cor-acento);  /* o único acento ciano na navbar */
+}
+
+/* Título central "Consultar CNPJ" */
+.navbar-titulo {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--cor-texto-primario);
+}
+
+/* Texto de perfil (usuário logado) */
+.navbar-perfil {
+    font-size: 12px;
+    color: var(--cor-texto-secundario);
+    text-align: right;
+    line-height: 1.5;
+}
+
+.navbar-perfil strong {
+    color: var(--cor-texto-primario);
+    font-weight: 500;
+}
+
+.navbar-perfil a.link-logout {
+    color: var(--cor-logout);
+    text-decoration: none;
+    font-size: 11px;
+}
+
+.navbar-perfil a.link-logout:hover {
+    text-decoration: underline;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   5. FORMULÁRIO DE CONSULTA
+   ─────────────────────────────────────────────────────────────
+   Input de CNPJ e área de botões de ação.
+   ───────────────────────────────────────────────────────────── */
+
+/* Wrapper do formulário principal */
+.form-consulta-wrapper {
+    background-color: var(--cor-fundo-card) !important;
+    border: 0.5px solid var(--cor-borda) !important;
+    border-radius: 12px !important;
+    padding: 20px 24px;
+    margin-bottom: 1.5rem;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Input principal — !important necessário para sobrescrever Bootstrap .form-control */
+.form-consulta-wrapper .form-control,
+.form-consulta-wrapper input[type="text"] {
+    background-color: var(--cor-fundo-input) !important;
+    border: 0.5px solid var(--cor-borda) !important;
+    border-radius: 8px !important;
+    color: var(--cor-texto-primario) !important;
+    font-size: 14px;
+    padding: 10px 14px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    transition: border-color 0.15s ease, background-color 0.25s ease;
+}
+
+.form-consulta-wrapper .form-control:focus,
+.form-consulta-wrapper input[type="text"]:focus {
+    border-color: var(--cor-borda-forte) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px var(--cor-acento-fundo) !important;
+    background-color: var(--cor-fundo-input) !important;
+    color: var(--cor-texto-primario) !important;
+}
+
+/* Placeholder */
+.form-consulta-wrapper .form-control::placeholder {
+    color: var(--cor-texto-inativo) !important;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Label do campo CNPJ */
+.form-consulta-wrapper .form-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--cor-texto-secundario) !important;
+    margin-bottom: 6px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   6. BOTÕES
+   ─────────────────────────────────────────────────────────────
+   Hierarquia visual:
+     .btn-primario   → ação principal (Consultar)
+     .btn-secundario → ação secundária (Validar Pessoa)
+     .btn-positivo   → ação de escrita (Cadastrar / Atualizar)
+   Todos usam as variáveis de tema para adaptar automaticamente.
+   ───────────────────────────────────────────────────────────── */
+
+/* Remove aparência padrão do Bootstrap nos botões que sobreescrevemos */
+.btn-primario,
+.btn-secundario,
+.btn-positivo {
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    padding: 9px 18px !important;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-primario:active,
+.btn-secundario:active,
+.btn-positivo:active {
+    transform: scale(0.98);
+}
+
+/* Consultar — fundo acento, texto acento-texto */
+.btn-primario {
+    background-color: var(--cor-acento) !important;
+    color: var(--cor-acento-texto) !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.btn-primario:hover {
+    opacity: 0.88;
+    color: var(--cor-acento-texto) !important;
+}
+
+/* Validar Pessoa — fundo aviso */
+.btn-secundario {
+    background-color: var(--cor-aviso-fundo) !important;
+    color: var(--cor-aviso) !important;
+    border: 0.5px solid var(--cor-aviso) !important;
+    box-shadow: none !important;
+}
+
+.btn-secundario:hover {
+    opacity: 0.85;
+    color: var(--cor-aviso) !important;
+}
+
+/* Cadastrar / Atualizar — fundo sucesso */
+.btn-positivo {
+    background-color: var(--cor-sucesso-fundo) !important;
+    color: var(--cor-sucesso) !important;
+    border: 0.5px solid var(--cor-sucesso) !important;
+    box-shadow: none !important;
+}
+
+.btn-positivo:hover {
+    opacity: 0.85;
+    color: var(--cor-sucesso) !important;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   7. MENSAGENS (alertas de erro, aviso e sucesso)
+   ─────────────────────────────────────────────────────────────
+   Substituem os .alert do Bootstrap por versões temáticas.
+   ───────────────────────────────────────────────────────────── */
+
+.msg-base {
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    margin-bottom: 1rem;
+    border-left: 3px solid transparent;
+    line-height: 1.6;
+}
+
+.msg-erro {
+    background-color: var(--cor-erro-fundo);
+    color: var(--cor-erro);
+    border-left-color: var(--cor-erro);
+}
+
+.msg-aviso {
+    background-color: var(--cor-aviso-fundo);
+    color: var(--cor-aviso);
+    border-left-color: var(--cor-aviso);
+}
+
+.msg-sucesso {
+    background-color: var(--cor-sucesso-fundo);
+    color: var(--cor-sucesso);
+    border-left-color: var(--cor-sucesso);
+}
+
+.msg-sucesso pre {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    margin: 6px 0 0;
+    color: inherit;
+    white-space: pre-wrap;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   8. CARDS DE RESULTADO
+   ─────────────────────────────────────────────────────────────
+   Usados na seção de dados retornados da Receita.
+   O .card-resultado é o wrapper principal; internamente usa
+   os .list-group-item já estilizados acima.
+   ───────────────────────────────────────────────────────────── */
+
+.card-resultado {
+    background-color: var(--cor-fundo-card) !important;
+    border: 0.5px solid var(--cor-borda) !important;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Cabeçalho de seção dentro do card (ex: "Dados retornados") */
+.card-resultado-header {
+    background-color: var(--cor-fundo-hover) !important;
+    border-bottom: 0.5px solid var(--cor-borda) !important;
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--cor-texto-secundario) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* Cada linha dentro do card de resultado */
+.card-resultado .list-group-item {
+    padding: 10px 16px;
+    font-size: 13px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-left: none;
+    border-right: none;
+    border-radius: 0 !important;
+}
+
+.card-resultado .list-group-item:first-child {
+    border-top: none;
+}
+
+/* Label (strong) dentro de cada linha */
+.card-resultado .list-group-item strong {
+    font-weight: 500;
+    color: var(--cor-texto-secundario);
+    min-width: 160px;   /* alinha os valores verticalmente */
+    flex-shrink: 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Cards de sócios e CNAEs */
+.card-socio,
+.card-cnae {
+    background-color: var(--cor-fundo-card) !important;
+    border: 0.5px solid var(--cor-borda) !important;
+    border-radius: 10px;
+    padding: 14px 16px;
+    height: 100%;
+    transition: border-color 0.15s ease;
+}
+
+.card-socio:hover,
+.card-cnae:hover {
+    border-color: var(--cor-borda-forte) !important;
+}
+
+.card-socio h6,
+.card-cnae h6 {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--cor-texto-primario) !important;
+    margin-bottom: 4px;
+}
+
+.card-socio p,
+.card-cnae p {
+    font-size: 12px;
+    color: var(--cor-texto-secundario) !important;
+    margin: 0;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   9. TAGS / BADGES
+   ─────────────────────────────────────────────────────────────
+   Usadas nos resultados para Situação, INPI, Tributação etc.
+   ───────────────────────────────────────────────────────────── */
+
+.tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+}
+
+.tag-ativa {
+    background-color: var(--cor-sucesso-fundo);
+    color: var(--cor-sucesso);
+}
+
+.tag-inativa {
+    background-color: var(--cor-erro-fundo);
+    color: var(--cor-erro);
+}
+
+.tag-info {
+    background-color: var(--cor-info-fundo);
+    color: var(--cor-info-texto);
+}
+
+.tag-aviso {
+    background-color: var(--cor-aviso-fundo);
+    color: var(--cor-aviso);
+}
+
+/* Resultado INPI inline */
+.inpi-positivo { color: var(--cor-sucesso); font-size: 13px; }
+.inpi-negativo { color: var(--cor-texto-inativo); font-size: 13px; }
+.inpi-erro     { color: var(--cor-texto-inativo); font-size: 13px; font-style: italic; }
+
+
+/* ─────────────────────────────────────────────────────────────
+   10. MAPA
+   ─────────────────────────────────────────────────────────────
+   Container do iframe do Google Maps.
+   ───────────────────────────────────────────────────────────── */
+
+.mapa-wrapper {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 0.5px solid var(--cor-borda);
+    margin-top: 0.5rem;
+}
+
+.mapa-endereco {
+    font-size: 12px;
+    color: var(--cor-texto-secundario);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.mapa-endereco .bi-geo-alt-fill {
+    color: var(--cor-erro);  /* ícone de pin vermelho em ambos os temas */
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   11. SÓCIOS E CNAEs
+   ─────────────────────────────────────────────────────────────
+   Grid responsivo de cards. Sem resultados: mensagem vazia.
+   ───────────────────────────────────────────────────────────── */
+
+.msg-vazio {
+    font-size: 13px;
+    color: var(--cor-texto-inativo);
+    padding: 12px 16px;
+    background-color: var(--cor-fundo-card);
+    border: 0.5px solid var(--cor-borda);
+    border-radius: 8px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   12. RODAPÉ
+   ─────────────────────────────────────────────────────────────
+   ───────────────────────────────────────────────────────────── */
+
+footer {
+    border-top: 0.5px solid var(--cor-rodape-borda);
+    margin-top: auto;
+    transition: border-color 0.25s ease;
+}
+
+footer .rodape-copy {
+    font-size: 12px;
+    color: var(--cor-rodape-texto);
+}
+
+footer .rodape-social a {
+    color: var(--cor-social-icon);
+    font-size: 16px;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+footer .rodape-social a:hover {
+    color: var(--cor-social-icon-hover);
+}
+
+footer .btn-idioma {
+    font-size: 12px;
+    color: var(--cor-texto-inativo);
+    background: transparent;
+    border: 0.5px solid var(--cor-borda);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+footer .btn-idioma:hover {
+    border-color: var(--cor-borda-forte);
+    color: var(--cor-texto-secundario);
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   13. TOGGLE DARK / LIGHT
+   ─────────────────────────────────────────────────────────────
+   Botão flutuante no canto superior direito da navbar.
+   O ícone muda via JS (sol / lua).
+   ───────────────────────────────────────────────────────────── */
+
+#btn-tema {
+    background: transparent;
+    border: 0.5px solid var(--cor-borda);
+    border-radius: 8px;
+    color: var(--cor-texto-secundario);
+    font-size: 14px;
+    padding: 5px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: border-color 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+}
+
+#btn-tema:hover {
+    border-color: var(--cor-borda-forte);
+    color: var(--cor-acento);
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   14. SPINNER INPI
+   ─────────────────────────────────────────────────────────────
+   Indicador de carregamento enquanto o fetch do INPI roda.
+   ───────────────────────────────────────────────────────────── */
+
+.inpi-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--cor-texto-inativo);
+}
+
+.inpi-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--cor-borda);
+    border-top-color: var(--cor-acento);
+    border-radius: 50%;
+    animation: girar 0.7s linear infinite;
+}
+
+@keyframes girar {
+    to { transform: rotate(360deg); }
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   15. PÁGINA DE LOGIN
+   ─────────────────────────────────────────────────────────────
+   O card de login é centralizado na tela.
+   Não há navbar nem rodapé nessa página.
+   ───────────────────────────────────────────────────────────── */
+
+/* Body específico do login — centralizado verticalmente */
+body.pagina-login {
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.login-card {
+    background-color: var(--cor-fundo-navbar);
+    border: 0.5px solid var(--cor-borda);
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: var(--sombra-login);
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Logo + nome da ferramenta */
+.login-marca {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.login-marca-nome {
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--cor-texto-primario);
+    letter-spacing: -0.03em;
+    display: block;
+}
+
+.login-marca-ponto {
+    color: var(--cor-acento); /* acento ciano no ponto */
+}
+
+.login-marca-subtitulo {
+    font-size: 12px;
+    color: var(--cor-texto-inativo);
+    margin-top: 4px;
+    display: block;
+}
+
+/* Imagem da logo Abdala Nexus — exibida acima do nome */
+.login-logo-img {
+    width: 120px;
+    height: auto;
+    display: block;
+    margin: 0 auto 12px;
+    /* Em dark mode a logo pode ter fundo branco: adicione filtro se necessário */
+}
+
+/* Campos de formulário no login */
+.login-card .campo-label {
+    margin-bottom: 5px;
+}
+
+.login-card input[type="text"],
+.login-card input[type="password"] {
+    width: 100%;
+    background-color: var(--cor-fundo-input);
+    border: 0.5px solid var(--cor-borda);
+    border-radius: 8px;
+    color: var(--cor-texto-primario);
+    font-size: 14px;
+    padding: 10px 14px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    outline: none;
+}
+
+.login-card input[type="text"]:focus,
+.login-card input[type="password"]:focus {
+    border-color: var(--cor-borda-forte);
+    box-shadow: 0 0 0 3px var(--cor-acento-fundo);
+}
+
+.login-card input::placeholder {
+    color: var(--cor-texto-inativo);
+}
+
+/* Botão de entrar — ocupa a largura total do card */
+.login-card .btn-entrar {
+    width: 100%;
+    background-color: var(--cor-acento);
+    color: var(--cor-acento-texto);
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 11px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.login-card .btn-entrar:hover  { opacity: 0.88; }
+.login-card .btn-entrar:active { transform: scale(0.99); }
+
+/* Toggle de tema no canto do card de login */
+.login-tema-toggle {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+}
+
+/* Tooltip "dica de login" (Bootstrap) adaptado ao tema */
+.login-dica {
+    font-size: 12px;
+    color: var(--cor-texto-inativo);
+    cursor: help;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   16. RESPONSIVIDADE MOBILE
+   ─────────────────────────────────────────────────────────────
+   Breakpoint: 768px (Bootstrap md).
+   ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    /* Login card ocupa quase toda a tela */
+    .login-card {
+        max-width: 100%;
+        margin: 16px;
+        padding: 28px 20px;
+    }
+
+    /* Navbar: logo e título menores */
+    .navbar-logo-texto { font-size: 14px; }
+    .navbar-titulo     { font-size: 13px; }
+
+    /* Botões de ação empilham verticalmente */
+    .acoes-formulario {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .acoes-formulario .btn-primario,
+    .acoes-formulario .btn-secundario,
+    .acoes-formulario .btn-positivo {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Label do strong dos itens de lista — remove min-width */
+    .card-resultado .list-group-item strong {
+        min-width: unset;
+    }
+}

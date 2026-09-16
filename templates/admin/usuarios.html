@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<!--
+    admin/usuarios.html — CRUD de usuários (Abdala Nexus)
+    ──────────────────────────────────────────────────────
+    Reaproveita os componentes visuais já definidos em theme.css
+    (.card-resultado, .tag, .btn-primario/.btn-secundario, .campo-grupo)
+    para manter a mesma identidade visual do restante da aplicação.
+-->
+<html lang="pt-br" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Usuários — Abdala Nexus</title>
+
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <script>
+        (function() {
+            var tema = localStorage.getItem('tema-afa') || 'dark';
+            document.documentElement.setAttribute('data-theme', tema);
+        })();
+    </script>
+
+    <style>
+        [data-theme="dark"] body { background-color: #0A0F1E !important; color: #E8EEF7 !important; }
+        [data-theme="light"] body { background-color: #F7F9FC !important; color: #111827 !important; }
+        body { padding-top: 56px; }
+        .navbar-custom { z-index: 1030; }
+        .conteudo-principal { padding: 2rem 0 3rem; flex: 1; }
+        h4.titulo-resultado { font-size: 16px; font-weight: 500; color: var(--cor-texto-primario); margin: 0 0 1rem; }
+
+        .navbar-perfil a.link-admin { color: var(--cor-acento); text-decoration: none; font-size: 11px; }
+        .navbar-perfil a.link-admin:hover { text-decoration: underline; }
+
+        /* Inputs/selects fora do .form-consulta-wrapper — mesma aparência, tema-aware */
+        .admin-input, .admin-select {
+            background-color: var(--cor-fundo-input) !important;
+            border: 0.5px solid var(--cor-borda) !important;
+            border-radius: 6px !important;
+            color: var(--cor-texto-primario) !important;
+            font-size: 13px;
+            padding: 6px 10px;
+        }
+        .admin-input:focus, .admin-select:focus {
+            border-color: var(--cor-borda-forte) !important;
+            outline: none !important;
+            box-shadow: 0 0 0 3px var(--cor-acento-fundo) !important;
+        }
+
+        .btn-perigo {
+            border-radius: 8px !important;
+            font-size: 12px !important;
+            font-weight: 500 !important;
+            padding: 6px 12px !important;
+            background-color: var(--cor-erro-fundo) !important;
+            color: var(--cor-erro) !important;
+            border: 0.5px solid var(--cor-erro) !important;
+            cursor: pointer;
+        }
+        .btn-perigo:hover { opacity: 0.85; }
+
+        .btn-mini {
+            border-radius: 8px !important;
+            font-size: 12px !important;
+            font-weight: 500 !important;
+            padding: 6px 12px !important;
+        }
+
+        .linha-usuario {
+            padding: 14px 16px;
+            border-bottom: 0.5px solid var(--cor-borda-divisor);
+        }
+        .linha-usuario:last-child { border-bottom: none; }
+
+        .admin-tabs a {
+            font-size: 13px;
+            color: var(--cor-texto-secundario);
+            text-decoration: none;
+            padding: 6px 4px;
+            margin-right: 16px;
+            border-bottom: 2px solid transparent;
+        }
+        .admin-tabs a.ativo {
+            color: var(--cor-texto-primario);
+            border-bottom-color: var(--cor-acento);
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-md fixed-top navbar-custom" aria-label="Navegação principal">
+        <div class="container-fluid position-relative px-3">
+            <a class="navbar-logo-texto" href="{{ url_for('index') }}">
+                Abdala Nexus<span class="navbar-logo-ponto">.</span>
+            </a>
+            <span class="navbar-titulo position-absolute start-50 translate-middle-x d-none d-md-block">
+                Admin — Usuários
+            </span>
+            <div class="d-flex align-items-center gap-3 ms-auto">
+                <button
+                    class="navbar-toggler border-0 p-0"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#navbarPerfil"
+                    aria-controls="navbarPerfil"
+                    aria-expanded="false"
+                    aria-label="Abrir menu">
+                    <i class="bi bi-person-circle" style="font-size: 20px; color: var(--cor-texto-secundario);"></i>
+                </button>
+                <div class="collapse navbar-collapse justify-content-end" id="navbarPerfil">
+                    <div class="navbar-perfil">
+                        {{ nome_usuario }}<br>
+                        <a href="{{ url_for('index') }}" class="link-admin">Consultar CNPJ</a>
+                        ·
+                        <a href="{{ url_for('logout') }}" class="link-logout">Sair</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container conteudo-principal">
+
+        <div class="admin-tabs mb-3">
+            <a href="{{ url_for('admin_usuarios') }}" class="ativo">Usuários</a>
+            <a href="{{ url_for('admin_tenants') }}">Tenants</a>
+        </div>
+
+        {% if erro %}
+            <div class="msg-base msg-erro" role="alert">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ erro }}
+            </div>
+        {% endif %}
+        {% if mensagem %}
+            <div class="msg-base msg-sucesso" role="status">
+                <i class="bi bi-check-circle me-1"></i>{{ mensagem }}
+            </div>
+        {% endif %}
+
+        <!-- Criar usuário -->
+        <h4 class="titulo-resultado">Novo usuário</h4>
+        <div class="form-consulta-wrapper mb-4">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="acao" value="criar">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-3">
+                        <label class="campo-label">Nome</label>
+                        <input type="text" name="nome" class="form-control" required>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="campo-label">E-mail</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label class="campo-label">Senha inicial</label>
+                        <input type="password" name="senha" class="form-control" minlength="8" required>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="campo-label">Tenant</label>
+                        <select name="tenant_id" class="form-select" required>
+                            {% for t in tenants %}
+                                <option value="{{ t.id }}">{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-1">
+                        <label class="campo-label">Role</label>
+                        <select name="role" class="form-select">
+                            <option value="user">user</option>
+                            <option value="admin">admin</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-1">
+                        <button type="submit" class="btn-primario w-100">Criar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Lista de usuários -->
+        <h4 class="titulo-resultado">Usuários cadastrados</h4>
+        <div class="card-resultado">
+            {% for usuario in usuarios %}
+                <div class="linha-usuario">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                        <div>
+                            <strong>{{ usuario.name }}</strong>
+                            <span class="texto-mono">{{ usuario.email }}</span>
+                            <span class="tag tag-info">{{ usuario.tenant_name }}</span>
+                            <span class="tag {{ 'tag-aviso' if usuario.role == 'admin' else 'tag-info' }}">{{ usuario.role }}</span>
+                            <span class="tag {{ 'tag-ativa' if usuario.active else 'tag-inativa' }}">
+                                {{ 'Ativo' if usuario.active else 'Inativo' }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <!-- Editar nome / tenant / role -->
+                        <form method="POST" class="d-flex flex-wrap align-items-center gap-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="acao" value="editar">
+                            <input type="hidden" name="user_id" value="{{ usuario.id }}">
+                            <input type="text" name="nome" value="{{ usuario.name }}" class="admin-input" style="max-width:160px">
+                            <select name="tenant_id" class="admin-select">
+                                {% for t in tenants %}
+                                    <option value="{{ t.id }}" {% if t.id == usuario.tenant_id %}selected{% endif %}>{{ t.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <select name="role" class="admin-select">
+                                <option value="user" {% if usuario.role == 'user' %}selected{% endif %}>user</option>
+                                <option value="admin" {% if usuario.role == 'admin' %}selected{% endif %}>admin</option>
+                            </select>
+                            <button type="submit" class="btn-secundario btn-mini">Salvar</button>
+                        </form>
+
+                        <!-- Redefinir senha -->
+                        <form method="POST" class="d-flex align-items-center gap-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="acao" value="redefinir_senha">
+                            <input type="hidden" name="user_id" value="{{ usuario.id }}">
+                            <input type="password" name="nova_senha" placeholder="Nova senha" minlength="8" class="admin-input" style="max-width:140px">
+                            <button type="submit" class="btn-secundario btn-mini">Redefinir</button>
+                        </form>
+
+                        <!-- Ativar / desativar -->
+                        <form method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="acao" value="alternar_status">
+                            <input type="hidden" name="user_id" value="{{ usuario.id }}">
+                            <button type="submit" class="btn-secundario btn-mini">
+                                {{ 'Desativar' if usuario.active else 'Ativar' }}
+                            </button>
+                        </form>
+
+                        <!-- Excluir -->
+                        <form method="POST" onsubmit="return confirm('Excluir o usuário {{ usuario.email }}? Essa ação não pode ser desfeita.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="acao" value="excluir">
+                            <input type="hidden" name="user_id" value="{{ usuario.id }}">
+                            <button type="submit" class="btn-perigo">Excluir</button>
+                        </form>
+                    </div>
+                </div>
+            {% else %}
+                <div class="linha-usuario">
+                    <span class="msg-vazio">Nenhum usuário cadastrado ainda.</span>
+                </div>
+            {% endfor %}
+        </div>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

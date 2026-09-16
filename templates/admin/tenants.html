@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<!--
+    admin/tenants.html — CRUD de tenants (empresas clientes) — Abdala Nexus
+-->
+<html lang="pt-br" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Tenants — Abdala Nexus</title>
+
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <script>
+        (function() {
+            var tema = localStorage.getItem('tema-afa') || 'dark';
+            document.documentElement.setAttribute('data-theme', tema);
+        })();
+    </script>
+
+    <style>
+        [data-theme="dark"] body { background-color: #0A0F1E !important; color: #E8EEF7 !important; }
+        [data-theme="light"] body { background-color: #F7F9FC !important; color: #111827 !important; }
+        body { padding-top: 56px; }
+        .navbar-custom { z-index: 1030; }
+        .conteudo-principal { padding: 2rem 0 3rem; flex: 1; }
+        h4.titulo-resultado { font-size: 16px; font-weight: 500; color: var(--cor-texto-primario); margin: 0 0 1rem; }
+
+        .navbar-perfil a.link-admin { color: var(--cor-acento); text-decoration: none; font-size: 11px; }
+        .navbar-perfil a.link-admin:hover { text-decoration: underline; }
+
+        .btn-mini {
+            border-radius: 8px !important;
+            font-size: 12px !important;
+            font-weight: 500 !important;
+            padding: 6px 12px !important;
+        }
+
+        .linha-tenant {
+            padding: 14px 16px;
+            border-bottom: 0.5px solid var(--cor-borda-divisor);
+        }
+        .linha-tenant:last-child { border-bottom: none; }
+
+        .admin-tabs a {
+            font-size: 13px;
+            color: var(--cor-texto-secundario);
+            text-decoration: none;
+            padding: 6px 4px;
+            margin-right: 16px;
+            border-bottom: 2px solid transparent;
+        }
+        .admin-tabs a.ativo {
+            color: var(--cor-texto-primario);
+            border-bottom-color: var(--cor-acento);
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-md fixed-top navbar-custom" aria-label="Navegação principal">
+        <div class="container-fluid position-relative px-3">
+            <a class="navbar-logo-texto" href="{{ url_for('index') }}">
+                Abdala Nexus<span class="navbar-logo-ponto">.</span>
+            </a>
+            <span class="navbar-titulo position-absolute start-50 translate-middle-x d-none d-md-block">
+                Admin — Tenants
+            </span>
+            <div class="d-flex align-items-center gap-3 ms-auto">
+                <button
+                    class="navbar-toggler border-0 p-0"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#navbarPerfil"
+                    aria-controls="navbarPerfil"
+                    aria-expanded="false"
+                    aria-label="Abrir menu">
+                    <i class="bi bi-person-circle" style="font-size: 20px; color: var(--cor-texto-secundario);"></i>
+                </button>
+                <div class="collapse navbar-collapse justify-content-end" id="navbarPerfil">
+                    <div class="navbar-perfil">
+                        {{ nome_usuario }}<br>
+                        <a href="{{ url_for('index') }}" class="link-admin">Consultar CNPJ</a>
+                        ·
+                        <a href="{{ url_for('logout') }}" class="link-logout">Sair</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container conteudo-principal">
+
+        <div class="admin-tabs mb-3">
+            <a href="{{ url_for('admin_usuarios') }}">Usuários</a>
+            <a href="{{ url_for('admin_tenants') }}" class="ativo">Tenants</a>
+        </div>
+
+        {% if erro %}
+            <div class="msg-base msg-erro" role="alert">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ erro }}
+            </div>
+        {% endif %}
+        {% if mensagem %}
+            <div class="msg-base msg-sucesso" role="status">
+                <i class="bi bi-check-circle me-1"></i>{{ mensagem }}
+            </div>
+        {% endif %}
+
+        <!-- Criar tenant -->
+        <h4 class="titulo-resultado">Novo tenant</h4>
+        <div class="form-consulta-wrapper mb-4">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="acao" value="criar">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-5">
+                        <label class="campo-label">Nome</label>
+                        <input type="text" name="nome" class="form-control" required>
+                    </div>
+                    <div class="col-12 col-md-5">
+                        <label class="campo-label">Slug (identificador)</label>
+                        <input type="text" name="slug" class="form-control" placeholder="ex: abdala-nexus" required>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <button type="submit" class="btn-primario w-100">Criar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Lista de tenants -->
+        <h4 class="titulo-resultado">Tenants cadastrados</h4>
+        <div class="card-resultado">
+            {% for tenant in tenants %}
+                <div class="linha-tenant d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div>
+                        <strong>{{ tenant.name }}</strong>
+                        <span class="texto-mono">{{ tenant.slug }}</span>
+                        <span class="tag {{ 'tag-ativa' if tenant.active else 'tag-inativa' }}">
+                            {{ 'Ativo' if tenant.active else 'Inativo' }}
+                        </span>
+                    </div>
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="acao" value="alternar_status">
+                        <input type="hidden" name="tenant_id" value="{{ tenant.id }}">
+                        <button type="submit" class="btn-secundario btn-mini">
+                            {{ 'Desativar' if tenant.active else 'Ativar' }}
+                        </button>
+                    </form>
+                </div>
+            {% else %}
+                <div class="linha-tenant">
+                    <span class="msg-vazio">Nenhum tenant cadastrado ainda.</span>
+                </div>
+            {% endfor %}
+        </div>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
