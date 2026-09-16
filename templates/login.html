@@ -80,13 +80,20 @@
             color: #111827 !important;
         }
 
-        /* Centraliza o conjunto (card + radar) e remove padding lateral em mobile */
+        /* Coluna: conteúdo centralizado ocupa o espaço disponível, rodapé
+           fica sempre colado embaixo */
         body {
             display: flex;
-            justify-content: center;
-            align-items: center;
+            flex-direction: column;
             min-height: 100vh;
             padding: 16px;
+        }
+
+        .login-conteudo {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* Botão de tema fixo no canto da tela - independe do layout do card */
@@ -248,8 +255,9 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════════
-         LINHA: card de login à esquerda + radar decorativo à direita
+         CONTEÚDO CENTRAL: card de login à esquerda + radar à direita
          ══════════════════════════════════════════════════════════ -->
+    <div class="login-conteudo">
     <div class="login-split">
 
     <div class="login-card-wrapper">
@@ -354,6 +362,23 @@
 
     </div>
     <!-- /.login-split -->
+    </div>
+    <!-- /.login-conteudo -->
+
+    <!-- ══════════════════════════════════════════════════════════
+         RODAPÉ
+         ══════════════════════════════════════════════════════════ -->
+    <footer class="py-2">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col text-center">
+                    <span class="rodape-copy">
+                        &copy; 2026 <a href="https://www.abdalanexus.com/" target="_blank" rel="noopener">Abdala Nexus</a>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </footer>
 
 
     <!-- ══════════════════════════════════════════════════════════
