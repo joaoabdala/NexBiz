@@ -428,6 +428,104 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--cor-sucesso) !important;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   BOTÃO COM ANEL GIRATÓRIO (.btn-giro)
+   ─────────────────────────────────────────────────────────────
+   Usado só nas duas ações mais importantes da aplicação: "Entrar"
+   (login) e "Consultar" (busca de CNPJ). Um anel em degradê cônico
+   gira por trás da superfície e só fica visível no hover; fora do
+   hover existe uma borda estática discreta. Cores 100% puxadas das
+   variáveis do tema (--cor-acento etc.), nada fixo tipo preto/branco.
+   ───────────────────────────────────────────────────────────── */
+.btn-giro {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 1px;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.btn-giro:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 22px var(--cor-acento-fundo);
+}
+
+.btn-giro:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Anel giratório - escondido em repouso, some ao passar o mouse */
+.btn-giro::before {
+    content: '';
+    position: absolute;
+    inset: -150%;
+    background: conic-gradient(from 90deg at 50% 50%, transparent 0%, transparent 75%, var(--cor-acento) 100%);
+    opacity: 0;
+    animation: btn-giro-rotacionar 3s linear infinite;
+    transition: opacity 0.3s ease;
+}
+
+.btn-giro:hover::before {
+    opacity: 1;
+}
+
+@keyframes btn-giro-rotacionar {
+    to { transform: rotate(360deg); }
+}
+
+/* Borda estática, visível só fora do hover */
+.btn-giro::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: var(--cor-borda-forte);
+    transition: opacity 0.3s ease;
+}
+
+.btn-giro:hover::after {
+    opacity: 0;
+}
+
+.btn-giro-superficie {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom, var(--cor-fundo-hover), var(--cor-fundo-navbar));
+    color: var(--cor-texto-primario);
+    border-radius: 9999px;
+    padding: 11px 26px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.25s ease;
+}
+
+.btn-giro:hover .btn-giro-superficie {
+    color: var(--cor-acento);
+}
+
+.btn-giro-seta {
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+    transition: transform 0.25s ease;
+}
+
+.btn-giro:hover .btn-giro-seta {
+    transform: translateX(3px);
+}
+
 
 /* ─────────────────────────────────────────────────────────────
    7. MENSAGENS (alertas de erro, aviso e sucesso)
@@ -809,9 +907,10 @@ body.pagina-login {
 }
 
 .login-marca-subtitulo {
-    font-size: 12px;
-    color: var(--cor-texto-inativo);
-    margin-top: 4px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--cor-texto-secundario);
+    margin-top: 8px;
     display: block;
 }
 
@@ -865,23 +964,9 @@ body.pagina-login {
     transition: background-color 9999s ease-in-out 0s;
 }
 
-/* Botão de entrar - ocupa a largura total do card */
-.login-card .btn-entrar {
-    width: 100%;
-    background-color: var(--cor-acento);
-    color: var(--cor-acento-texto);
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 11px;
-    cursor: pointer;
+.login-card .btn-giro {
     margin-top: 8px;
-    transition: opacity 0.15s ease, transform 0.1s ease;
 }
-
-.login-card .btn-entrar:hover  { opacity: 0.88; }
-.login-card .btn-entrar:active { transform: scale(0.99); }
 
 /* Toggle de tema no canto do card de login */
 .login-tema-toggle {
@@ -928,7 +1013,8 @@ body.pagina-login {
 
     .acoes-formulario .btn-primario,
     .acoes-formulario .btn-secundario,
-    .acoes-formulario .btn-positivo {
+    .acoes-formulario .btn-positivo,
+    .acoes-formulario .btn-giro {
         width: 100%;
         text-align: center;
     }

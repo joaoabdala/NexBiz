@@ -66,7 +66,7 @@
             color: #111827 !important;
         }
 
-        /* Centraliza o card e remove padding lateral em mobile */
+        /* Centraliza o conjunto (card + radar) e remove padding lateral em mobile */
         body {
             display: flex;
             justify-content: center;
@@ -75,62 +75,191 @@
             padding: 16px;
         }
 
-        /* Posiciona o botão de tema no canto superior direito do card */
-        .login-card-wrapper {
-            position: relative;
-            width: 100%;
-            max-width: 400px;
+        /* Botão de tema fixo no canto da tela - independe do layout do card */
+        .login-tema-toggle {
+            position: fixed;
+            top: 20px;
+            right: 24px;
+            z-index: 20;
         }
 
-        .login-tema-toggle {
-            position: absolute;
-            top: -40px;
-            right: 0;
+        /* Linha com o card à esquerda e o radar à direita */
+        .login-split {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 72px;
+        }
+
+        .login-card-wrapper {
+            width: 100%;
+            max-width: 400px;
+            flex-shrink: 0;
         }
 
         /* Espaçamento entre campos do formulário */
         .campo-grupo {
             margin-bottom: 16px;
         }
+
+        /* ─────────────────────────────────────────────────────────
+           RADAR ANIMADO - decoração ao lado do card de login
+           ─────────────────────────────────────────────────────────
+           Feito só com CSS (sem imagem): anéis concêntricos fixos,
+           uma varredura giratória (conic-gradient) e alguns pontos
+           que piscam como "achados" da busca. Usa as variáveis de
+           tema (--cor-acento etc.) para se adaptar a claro/escuro.
+           ───────────────────────────────────────────────────────── */
+        .login-radar-wrapper {
+            position: relative;
+            width: 380px;
+            height: 380px;
+            flex-shrink: 0;
+        }
+
+        .login-radar-wrapper::before {
+            /* Glow suave atrás do radar */
+            content: '';
+            position: absolute;
+            inset: -40px;
+            background: radial-gradient(circle, var(--cor-acento-fundo) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .radar {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+        }
+
+        .radar-anel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 1px solid var(--cor-borda-forte);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.45;
+        }
+        .radar-anel-1 { width: 100%; height: 100%; }
+        .radar-anel-2 { width: 72%; height: 72%; }
+        .radar-anel-3 { width: 44%; height: 44%; }
+        .radar-anel-4 { width: 18%; height: 18%; opacity: 0.7; }
+
+        /* Linhas cruzadas, como um retículo de mira */
+        .radar-eixo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            background: var(--cor-borda);
+            transform: translate(-50%, -50%);
+        }
+        .radar-eixo-h { width: 100%; height: 1px; }
+        .radar-eixo-v { width: 1px; height: 100%; }
+
+        .radar-varredura {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent 0deg, transparent 265deg, var(--cor-acento) 300deg, transparent 340deg);
+            animation: radar-girar 4.5s linear infinite;
+        }
+
+        @keyframes radar-girar {
+            to { transform: rotate(360deg); }
+        }
+
+        .radar-nucleo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background: var(--cor-acento);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 18px 4px var(--cor-acento);
+        }
+
+        .radar-ponto {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--cor-acento);
+            transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(0.4);
+            opacity: 0;
+            animation: radar-pulso 3.6s ease-in-out infinite;
+            animation-delay: var(--atraso, 0s);
+        }
+
+        @keyframes radar-pulso {
+            0%, 12% {
+                opacity: 0;
+                transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(0.4);
+            }
+            20%, 38% {
+                opacity: 1;
+                transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1);
+            }
+            55%, 100% {
+                opacity: 0;
+                transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(0.4);
+            }
+        }
+
+        /* Some com o radar e volta pro layout de uma coluna em telas menores */
+        @media (max-width: 991px) {
+            .login-radar-wrapper {
+                display: none;
+            }
+            .login-split {
+                gap: 0;
+            }
+        }
     </style>
 </head>
 
 <body>
 
-    <!-- ══════════════════════════════════════════════════════════
-         WRAPPER DO CARD (posiciona o toggle de tema acima do card)
-         ══════════════════════════════════════════════════════════ -->
-    <div class="login-card-wrapper">
+    <!-- Botão de alternância de tema (dark ↔ light) - fixo no canto da tela -->
+    <div class="login-tema-toggle">
+        <button id="btn-tema" aria-label="Alternar tema">
+            <!-- O ícone e o texto são trocados pelo JS abaixo -->
+            <i class="bi bi-sun" id="icone-tema"></i>
+            <span id="texto-tema">Claro</span>
+        </button>
+    </div>
 
-        <!-- Botão de alternância de tema (dark ↔ light) -->
-        <div class="login-tema-toggle">
-            <button id="btn-tema" aria-label="Alternar tema">
-                <!-- O ícone e o texto são trocados pelo JS abaixo -->
-                <i class="bi bi-sun" id="icone-tema"></i>
-                <span id="texto-tema">Claro</span>
-            </button>
-        </div>
+    <!-- ══════════════════════════════════════════════════════════
+         LINHA: card de login à esquerda + radar decorativo à direita
+         ══════════════════════════════════════════════════════════ -->
+    <div class="login-split">
+
+    <div class="login-card-wrapper">
 
         <!-- ══════════════════════════════════════════════════════
              CARD DE LOGIN
              ══════════════════════════════════════════════════════ -->
         <div class="login-card">
 
-            <!-- Marca: logo Abdala Nexus + nome da ferramenta -->
+            <!-- Marca: logo NexBiz + nome da ferramenta -->
             <div class="login-marca">
 
-                <!-- Logo Abdala Nexus -->
+                <!-- Logo NexBiz -->
                 <img
-                    src="{{ url_for('static', filename='images/abdala-nexus-logo.png') }}"
-                    alt="Abdala Nexus"
+                    src="{{ url_for('static', filename='images/logo.png') }}"
+                    alt="Nex Biz"
                     class="login-logo-img"
                 >
 
                 <!-- Nome da ferramenta com ponto ciano como acento -->
                 <span class="login-marca-nome">
-                    Consultar CNPJ<span class="login-marca-ponto">.</span>
+                    NexBiz<span class="login-marca-ponto">.</span>
                 </span>
-                <span class="login-marca-subtitulo">Abdala Nexus</span>
+                <span class="login-marca-subtitulo">Entre para consultar CNPJ, tributação e marcas</span>
             </div>
 
             <!-- Mensagem de erro (exibida pelo Flask quando login falha) -->
@@ -152,7 +281,7 @@
                         type="email"
                         id="email"
                         name="email"
-                        placeholder="seu.email@empresa.com"
+                        placeholder="email@empresa.com"
                         autocomplete="username"
                         required
                     >
@@ -172,8 +301,14 @@
                 </div>
 
                 <!-- Botão de submit -->
-                <button type="submit" class="btn-entrar">
-                    Entrar
+                <button type="submit" class="btn-giro w-100">
+                    <span class="btn-giro-superficie">
+                        Entrar
+                        <svg class="btn-giro-seta" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12h14" />
+                            <path d="m12 5 7 7-7 7" />
+                        </svg>
+                    </span>
                 </button>
 
             </form>
@@ -182,6 +317,29 @@
 
     </div>
     <!-- /.login-card-wrapper -->
+
+    <!-- ══════════════════════════════════════════════════════════
+         RADAR DECORATIVO - some em telas menores (ver media query)
+         ══════════════════════════════════════════════════════════ -->
+    <div class="login-radar-wrapper" aria-hidden="true">
+        <div class="radar">
+            <div class="radar-eixo radar-eixo-h"></div>
+            <div class="radar-eixo radar-eixo-v"></div>
+            <div class="radar-anel radar-anel-1"></div>
+            <div class="radar-anel radar-anel-2"></div>
+            <div class="radar-anel radar-anel-3"></div>
+            <div class="radar-anel radar-anel-4"></div>
+            <div class="radar-varredura"></div>
+            <div class="radar-nucleo"></div>
+            <span class="radar-ponto" style="--x: 70px; --y: -95px; --atraso: 0s;"></span>
+            <span class="radar-ponto" style="--x: -110px; --y: 30px; --atraso: 1.2s;"></span>
+            <span class="radar-ponto" style="--x: 40px; --y: 110px; --atraso: 2.4s;"></span>
+            <span class="radar-ponto" style="--x: -60px; --y: -60px; --atraso: 3.1s;"></span>
+        </div>
+    </div>
+
+    </div>
+    <!-- /.login-split -->
 
 
     <!-- ══════════════════════════════════════════════════════════
