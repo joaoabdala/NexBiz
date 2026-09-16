@@ -4,6 +4,7 @@ import os
 import secrets
 from datetime import datetime, timedelta
 from functools import wraps
+from zoneinfo import ZoneInfo
 
 import psycopg2
 import requests
@@ -93,16 +94,23 @@ def adicionar_headers_seguranca(response):
     return response
 
 
+TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
+
 ACOES_AUDITORIA_LABELS = {
     "criar_usuario": "Criou usuário",
     "editar_usuario": "Editou usuário",
     "redefinir_senha": "Redefiniu senha",
-    "alternar_status_usuario": "Ativou/desativou usuário",
+    "ativar_usuario": "Ativou usuário",
+    "desativar_usuario": "Desativou usuário",
     "excluir_usuario": "Excluiu usuário",
     "criar_tenant": "Criou tenant",
     "editar_tenant": "Editou tenant",
-    "alternar_status_tenant": "Ativou/desativou tenant",
+    "ativar_tenant": "Ativou tenant",
+    "desativar_tenant": "Desativou tenant",
     "excluir_tenant": "Excluiu tenant",
+    # mantidos só pra rótulo de registros antigos, gravados antes desta mudança
+    "alternar_status_usuario": "Ativou/desativou usuário",
+    "alternar_status_tenant": "Ativou/desativou tenant",
 }
 
 
@@ -427,7 +435,7 @@ def admin_tenants():
                         "UPDATE tenants SET name = %s, slug = %s WHERE id = %s", (nome, slug, tenant_id)
                     )
                     conn.commit()
-                    registrar_auditoria("editar_tenant", f"tenant_id={tenant_id} nome={nome} slug={slug}")
+                    registrar_auditoria("editar_tenant", f"'{nome}' (slug={slug})")
                     mensagem = "Tenant atualizado."
 
             elif acao == "alternar_status":
@@ -435,16 +443,22 @@ def admin_tenants():
                 if tenant_e_ultimo_acesso_admin(cursor, tenant_id):
                     erro = "Não é possível desativar: nenhum admin ativo teria mais acesso ao sistema depois disso."
                 else:
-                    cursor.execute("UPDATE tenants SET active = NOT active WHERE id = %s", (tenant_id,))
+                    cursor.execute(
+                        "UPDATE tenants SET active = NOT active WHERE id = %s RETURNING name, active",
+                        (tenant_id,),
+                    )
+                    nome_tenant, ativo_novo = cursor.fetchone()
                     conn.commit()
-                    registrar_auditoria("alternar_status_tenant", f"tenant_id={tenant_id}")
+                    acao_log = "ativar_tenant" if ativo_novo else "desativar_tenant"
+                    registrar_auditoria(acao_log, f"'{nome_tenant}'")
                     mensagem = "Status do tenant atualizado."
 
             elif acao == "excluir":
                 tenant_id = request.form.get("tenant_id")
-                cursor.execute("DELETE FROM tenants WHERE id = %s", (tenant_id,))
+                cursor.execute("DELETE FROM tenants WHERE id = %s RETURNING name", (tenant_id,))
+                row = cursor.fetchone()
                 conn.commit()
-                registrar_auditoria("excluir_tenant", f"tenant_id={tenant_id}")
+                registrar_auditoria("excluir_tenant", f"'{row[0]}'" if row else f"tenant_id={tenant_id}")
                 mensagem = "Tenant excluído."
 
             cursor.close()
@@ -509,12 +523,16 @@ def admin_usuarios():
                 elif len(senha) < 8:
                     erro = "A senha precisa ter pelo menos 8 caracteres."
                 else:
+                    cursor.execute("SELECT name FROM tenants WHERE id = %s", (tenant_id,))
+                    tenant_row = cursor.fetchone()
+                    nome_tenant = tenant_row[0] if tenant_row else f"id={tenant_id}"
+
                     cursor.execute(
                         "INSERT INTO users (tenant_id, name, email, password_hash, role) VALUES (%s, %s, %s, %s, %s)",
                         (tenant_id, nome, email, generate_password_hash(senha), role),
                     )
                     conn.commit()
-                    registrar_auditoria("criar_usuario", f"email={email} tenant_id={tenant_id} role={role}")
+                    registrar_auditoria("criar_usuario", f"'{email}' em '{nome_tenant}' (role={role})")
                     mensagem = f"Usuário '{email}' criado."
 
             elif acao == "editar":
@@ -523,9 +541,10 @@ def admin_usuarios():
                 role = request.form.get("role") if request.form.get("role") in ("admin", "user") else "user"
                 tenant_id = request.form.get("tenant_id")
 
-                cursor.execute("SELECT active FROM tenants WHERE id = %s", (tenant_id,))
+                cursor.execute("SELECT name, active FROM tenants WHERE id = %s", (tenant_id,))
                 tenant_row = cursor.fetchone()
-                tenant_novo_ativo = bool(tenant_row and tenant_row[0])
+                nome_tenant = tenant_row[0] if tenant_row else f"id={tenant_id}"
+                tenant_novo_ativo = bool(tenant_row and tenant_row[1])
 
                 if (role != "admin" or not tenant_novo_ativo) and eh_unico_admin_ativo(cursor, user_id):
                     erro = (
@@ -534,11 +553,14 @@ def admin_usuarios():
                     )
                 else:
                     cursor.execute(
-                        "UPDATE users SET name = %s, role = %s, tenant_id = %s WHERE id = %s",
+                        "UPDATE users SET name = %s, role = %s, tenant_id = %s WHERE id = %s RETURNING email",
                         (nome, role, tenant_id, user_id),
                     )
+                    (email_usuario,) = cursor.fetchone()
                     conn.commit()
-                    registrar_auditoria("editar_usuario", f"user_id={user_id}")
+                    registrar_auditoria(
+                        "editar_usuario", f"'{email_usuario}' -> nome={nome}, tenant='{nome_tenant}', role={role}"
+                    )
                     mensagem = "Usuário atualizado."
 
             elif acao == "redefinir_senha":
@@ -548,11 +570,12 @@ def admin_usuarios():
                     erro = "A nova senha precisa ter pelo menos 8 caracteres."
                 else:
                     cursor.execute(
-                        "UPDATE users SET password_hash = %s WHERE id = %s",
+                        "UPDATE users SET password_hash = %s WHERE id = %s RETURNING email",
                         (generate_password_hash(nova_senha), user_id),
                     )
+                    row = cursor.fetchone()
                     conn.commit()
-                    registrar_auditoria("redefinir_senha", f"user_id={user_id}")
+                    registrar_auditoria("redefinir_senha", f"'{row[0]}'" if row else f"user_id={user_id}")
                     mensagem = "Senha redefinida."
 
             elif acao == "alternar_status":
@@ -560,9 +583,14 @@ def admin_usuarios():
                 if eh_unico_admin_ativo(cursor, user_id):
                     erro = "Não é possível desativar o único usuário admin ativo."
                 else:
-                    cursor.execute("UPDATE users SET active = NOT active WHERE id = %s", (user_id,))
+                    cursor.execute(
+                        "UPDATE users SET active = NOT active WHERE id = %s RETURNING email, active",
+                        (user_id,),
+                    )
+                    email_usuario, ativo_novo = cursor.fetchone()
                     conn.commit()
-                    registrar_auditoria("alternar_status_usuario", f"user_id={user_id}")
+                    acao_log = "ativar_usuario" if ativo_novo else "desativar_usuario"
+                    registrar_auditoria(acao_log, f"'{email_usuario}'")
                     mensagem = "Status do usuário atualizado."
 
             elif acao == "excluir":
@@ -570,9 +598,10 @@ def admin_usuarios():
                 if eh_unico_admin_ativo(cursor, user_id):
                     erro = "Não é possível excluir o único usuário admin ativo."
                 else:
-                    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+                    cursor.execute("DELETE FROM users WHERE id = %s RETURNING email", (user_id,))
+                    row = cursor.fetchone()
                     conn.commit()
-                    registrar_auditoria("excluir_usuario", f"user_id={user_id}")
+                    registrar_auditoria("excluir_usuario", f"'{row[0]}'" if row else f"user_id={user_id}")
                     mensagem = "Usuário excluído."
 
             cursor.close()
@@ -634,6 +663,11 @@ def admin_auditoria():
         cursor.close()
     finally:
         conn.close()
+
+    # O Postgres guarda em UTC (timestamptz) - converte pro horário de
+    # Brasília só na hora de exibir.
+    for registro in registros:
+        registro["created_at"] = registro["created_at"].astimezone(TZ_BRASILIA)
 
     return render_template(
         "admin/auditoria.html",

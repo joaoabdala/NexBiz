@@ -15,5 +15,6 @@ python-dotenv==1.1.1
 redis==5.0.8
 requests==2.32.4
 beautifulsoup4==4.12.3
+tzdata==2025.2
 urllib3==2.5.0
 Werkzeug==3.1.3
