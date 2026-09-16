@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<!--
+    admin/auditoria.html - Trilha de auditoria (Abdala Nexus)
+    ───────────────────────────────────────────────────────────
+    Tela só de leitura - lista as últimas ações feitas em /admin
+    (criar/editar/ativar/excluir usuário ou tenant, redefinição de
+    senha), gravadas pela função registrar_auditoria em app.py.
+-->
+<html lang="pt-br" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Auditoria - Abdala Nexus</title>
+
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
+    <!-- Ícone usado pelo iOS ao "Adicionar à Tela de Início" -->
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <script>
+        (function() {
+            var tema = localStorage.getItem('tema-afa') || 'dark';
+            document.documentElement.setAttribute('data-theme', tema);
+        })();
+    </script>
+
+    <style>
+        [data-theme="dark"] body { background-color: #0A0F1E !important; color: #E8EEF7 !important; }
+        [data-theme="light"] body { background-color: #F7F9FC !important; color: #111827 !important; }
+        body { padding-top: 56px; }
+        .navbar-custom { z-index: 1030; }
+        .conteudo-principal { padding: 2rem 0 3rem; flex: 1; }
+        h4.titulo-resultado { font-size: 16px; font-weight: 500; color: var(--cor-texto-primario); margin: 0 0 1rem; }
+
+        .linha-auditoria {
+            padding: 12px 16px;
+            border-bottom: 0.5px solid var(--cor-borda-divisor);
+        }
+        .linha-auditoria:last-child { border-bottom: none; }
+
+        .auditoria-detalhes {
+            font-size: 12px;
+            color: var(--cor-texto-inativo);
+            margin-top: 2px;
+        }
+
+        .admin-tabs a {
+            font-size: 13px;
+            color: var(--cor-texto-secundario);
+            text-decoration: none;
+            padding: 6px 4px;
+            margin-right: 16px;
+            border-bottom: 2px solid transparent;
+        }
+        .admin-tabs a.ativo {
+            color: var(--cor-texto-primario);
+            border-bottom-color: var(--cor-acento);
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-md fixed-top navbar-custom" aria-label="Navegação principal">
+        <div class="container-fluid position-relative px-3">
+            <a class="navbar-logo-texto" href="{{ url_for('index') }}">
+                Abdala Nexus<span class="navbar-logo-ponto">.</span>
+            </a>
+            <span class="navbar-titulo position-absolute start-50 translate-middle-x d-none d-md-block">
+                Admin - Auditoria
+            </span>
+            <div class="d-flex align-items-center gap-3 ms-auto">
+                <a href="{{ url_for('index') }}" class="btn-admin-nav">
+                    <i class="bi bi-search"></i>
+                    <span class="d-none d-sm-inline">Consultar CNPJ</span>
+                </a>
+                <button id="btn-tema" aria-label="Alternar tema">
+                    <i class="bi bi-sun" id="icone-tema"></i>
+                    <span id="texto-tema" class="d-none d-sm-inline">Claro</span>
+                </button>
+                <button
+                    class="navbar-toggler border-0 p-0"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#navbarPerfil"
+                    aria-controls="navbarPerfil"
+                    aria-expanded="false"
+                    aria-label="Abrir menu">
+                    <i class="bi bi-person-circle" style="font-size: 20px; color: var(--cor-texto-secundario);"></i>
+                </button>
+                <div class="collapse navbar-collapse justify-content-end" id="navbarPerfil">
+                    <div class="navbar-perfil">
+                        {{ nome_usuario }}<br>
+                        <a href="{{ url_for('logout') }}" class="link-logout">Sair</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container conteudo-principal">
+
+        <div class="admin-tabs mb-3">
+            <a href="{{ url_for('admin_usuarios') }}">Usuários</a>
+            <a href="{{ url_for('admin_tenants') }}">Tenants</a>
+            <a href="{{ url_for('admin_auditoria') }}" class="ativo">Auditoria</a>
+        </div>
+
+        <h4 class="titulo-resultado">Últimas ações (máx. 200)</h4>
+
+        <div class="card-resultado">
+            {% for registro in registros %}
+                <div class="linha-auditoria">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div>
+                            <strong>{{ acoes_labels.get(registro.action, registro.action) }}</strong>
+                            <span class="texto-mono">{{ registro.actor_email }}</span>
+                            {% if registro.details %}
+                                <div class="auditoria-detalhes texto-mono">{{ registro.details }}</div>
+                            {% endif %}
+                        </div>
+                        <span class="tag tag-info">{{ registro.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                    </div>
+                </div>
+            {% else %}
+                <div class="linha-auditoria">
+                    <span class="msg-vazio">Nenhuma ação registrada ainda.</span>
+                </div>
+            {% endfor %}
+        </div>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Toggle de tema (dark/light) - mesma lógica do index.html/login.html -->
+    <script>
+        (function () {
+            const CHAVE_STORAGE = 'tema-afa';
+            const html          = document.documentElement;
+            const btnTema       = document.getElementById('btn-tema');
+            const iconeTema     = document.getElementById('icone-tema');
+            const textoTema     = document.getElementById('texto-tema');
+
+            const temaInicial = localStorage.getItem(CHAVE_STORAGE) || 'dark';
+            aplicarTema(temaInicial);
+
+            btnTema.addEventListener('click', function () {
+                const temaAtual = html.getAttribute('data-theme');
+                const novoTema  = temaAtual === 'dark' ? 'light' : 'dark';
+                aplicarTema(novoTema);
+                localStorage.setItem(CHAVE_STORAGE, novoTema);
+            });
+
+            function aplicarTema(tema) {
+                html.setAttribute('data-theme', tema);
+                if (tema === 'dark') {
+                    iconeTema.className  = 'bi bi-sun';
+                    textoTema.textContent = 'Claro';
+                } else {
+                    iconeTema.className  = 'bi bi-moon-stars';
+                    textoTema.textContent = 'Escuro';
+                }
+            }
+        })();
+    </script>
+</body>
+</html>

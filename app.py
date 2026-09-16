@@ -93,6 +93,19 @@ def adicionar_headers_seguranca(response):
     return response
 
 
+ACOES_AUDITORIA_LABELS = {
+    "criar_usuario": "Criou usuário",
+    "editar_usuario": "Editou usuário",
+    "redefinir_senha": "Redefiniu senha",
+    "alternar_status_usuario": "Ativou/desativou usuário",
+    "excluir_usuario": "Excluiu usuário",
+    "criar_tenant": "Criou tenant",
+    "editar_tenant": "Editou tenant",
+    "alternar_status_tenant": "Ativou/desativou tenant",
+    "excluir_tenant": "Excluiu tenant",
+}
+
+
 def registrar_auditoria(acao: str, detalhes: str = "") -> None:
     try:
         conn = get_conn()
@@ -602,6 +615,30 @@ def admin_usuarios():
         tenants=tenants,
         erro=erro,
         mensagem=mensagem,
+        nome_usuario=session["nome_exibicao"],
+        is_admin=True,
+    )
+
+
+@app.route("/admin/auditoria")
+@admin_required
+def admin_auditoria():
+    conn = get_conn()
+    try:
+        cursor = dict_cursor(conn)
+        cursor.execute(
+            "SELECT id, actor_email, action, details, created_at FROM audit_log "
+            "ORDER BY created_at DESC LIMIT 200"
+        )
+        registros = cursor.fetchall()
+        cursor.close()
+    finally:
+        conn.close()
+
+    return render_template(
+        "admin/auditoria.html",
+        registros=registros,
+        acoes_labels=ACOES_AUDITORIA_LABELS,
         nome_usuario=session["nome_exibicao"],
         is_admin=True,
     )
