@@ -144,6 +144,12 @@
             align-items: center;
             justify-content: center;
             gap: 72px;
+            /* O NexGarage não centraliza 100% matemático - o card real
+               deles fica ~16px mais pra baixo do centro exato (conferi
+               no computed style: transform: translateY(16px)), provável
+               ajuste visual pra compensar o botão de tema fixo no topo.
+               Replicando o mesmo deslocamento aqui. */
+            transform: translateY(16px);
         }
 
         /* Ancorado no fundo do body (position:relative) - ver comentário
