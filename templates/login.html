@@ -16,7 +16,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Abdala Nexus</title>
+    <title>NexBiz - Consultar CNPJ</title>
+    <meta name="description" content="Entre para consultar CNPJ, tributação e marcas.">
+
+    <!-- Metadados exibidos ao compartilhar o link (WhatsApp, Slack, Discord, etc.) -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="NexBiz - Consultar CNPJ">
+    <meta property="og:description" content="Entre para consultar CNPJ, tributação e marcas.">
+    <meta property="og:image" content="{{ url_for('static', filename='images/logo.png', _external=True) }}">
+    <meta property="og:url" content="{{ request.url_root }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="NexBiz - Consultar CNPJ">
+    <meta name="twitter:description" content="Entre para consultar CNPJ, tributação e marcas.">
+    <meta name="twitter:image" content="{{ url_for('static', filename='images/logo.png', _external=True) }}">
 
     <!-- Favicon -->
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
