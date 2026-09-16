@@ -30,11 +30,18 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
-# O log de acesso do Werkzeug (uma linha "GET/HEAD/POST ... HTTP/1.1 200 -"
-# por requisição, incluindo checagens automáticas de porta do editor) é
-# ruído — os eventos que importam (login, consulta de CNPJ, ações de admin)
-# já são logados explicitamente pelo app.logger abaixo.
-logging.getLogger("werkzeug").setLevel(logging.WARNING)
+class SilenciarLogDeAcessoFilter(logging.Filter):
+    """O Werkzeug loga uma linha por requisição (ex.: '"GET / HTTP/1.1" 200 -'),
+    incluindo checagens automáticas de porta do editor - isso vira ruído, já
+    que os eventos que importam (login, consulta de CNPJ, ações de admin) já
+    são logados explicitamente pelo app.logger. Filtra só essas linhas de
+    acesso, mantendo mensagens como a de start-up ("Running on http://...")."""
+
+    def filter(self, record):
+        return "HTTP/1." not in record.getMessage()
+
+
+logging.getLogger("werkzeug").addFilter(SilenciarLogDeAcessoFilter())
 
 app = Flask(__name__)
 
@@ -70,6 +77,18 @@ def registrar_auditoria(acao: str, detalhes: str = "") -> None:
         conn.close()
     except Exception:
         app.logger.exception("Falha ao registrar auditoria da ação '%s'", acao)
+
+
+def eh_unico_admin_ativo(cursor, user_id) -> bool:
+    """True se user_id é hoje um admin ativo e não existe nenhum outro
+    admin ativo - usado pra impedir que a última pessoa com acesso ao
+    admin se desative, se exclua ou perca a role sem querer."""
+    cursor.execute("SELECT role, active FROM users WHERE id = %s", (user_id,))
+    row = cursor.fetchone()
+    if not row or row[0] != "admin" or not row[1]:
+        return False
+    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = true")
+    return cursor.fetchone()[0] <= 1
 
 
 def login_required(view):
@@ -420,13 +439,16 @@ def admin_usuarios():
                 role = request.form.get("role") if request.form.get("role") in ("admin", "user") else "user"
                 tenant_id = request.form.get("tenant_id")
 
-                cursor.execute(
-                    "UPDATE users SET name = %s, role = %s, tenant_id = %s WHERE id = %s",
-                    (nome, role, tenant_id, user_id),
-                )
-                conn.commit()
-                registrar_auditoria("editar_usuario", f"user_id={user_id}")
-                mensagem = "Usuário atualizado."
+                if role != "admin" and eh_unico_admin_ativo(cursor, user_id):
+                    erro = "Não é possível remover a permissão de admin do único usuário admin ativo."
+                else:
+                    cursor.execute(
+                        "UPDATE users SET name = %s, role = %s, tenant_id = %s WHERE id = %s",
+                        (nome, role, tenant_id, user_id),
+                    )
+                    conn.commit()
+                    registrar_auditoria("editar_usuario", f"user_id={user_id}")
+                    mensagem = "Usuário atualizado."
 
             elif acao == "redefinir_senha":
                 user_id = request.form.get("user_id")
@@ -444,17 +466,23 @@ def admin_usuarios():
 
             elif acao == "alternar_status":
                 user_id = request.form.get("user_id")
-                cursor.execute("UPDATE users SET active = NOT active WHERE id = %s", (user_id,))
-                conn.commit()
-                registrar_auditoria("alternar_status_usuario", f"user_id={user_id}")
-                mensagem = "Status do usuário atualizado."
+                if eh_unico_admin_ativo(cursor, user_id):
+                    erro = "Não é possível desativar o único usuário admin ativo."
+                else:
+                    cursor.execute("UPDATE users SET active = NOT active WHERE id = %s", (user_id,))
+                    conn.commit()
+                    registrar_auditoria("alternar_status_usuario", f"user_id={user_id}")
+                    mensagem = "Status do usuário atualizado."
 
             elif acao == "excluir":
                 user_id = request.form.get("user_id")
-                cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-                conn.commit()
-                registrar_auditoria("excluir_usuario", f"user_id={user_id}")
-                mensagem = "Usuário excluído."
+                if eh_unico_admin_ativo(cursor, user_id):
+                    erro = "Não é possível excluir o único usuário admin ativo."
+                else:
+                    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+                    conn.commit()
+                    registrar_auditoria("excluir_usuario", f"user_id={user_id}")
+                    mensagem = "Usuário excluído."
 
             cursor.close()
         except psycopg2.errors.UniqueViolation:
