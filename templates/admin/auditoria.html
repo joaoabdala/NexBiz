@@ -84,20 +84,29 @@
                     <i class="bi bi-sun" id="icone-tema"></i>
                     <span id="texto-tema" class="d-none d-sm-inline">Claro</span>
                 </button>
-                <button
-                    class="navbar-toggler border-0 p-0"
-                    type="button"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#navbarPerfil"
-                    aria-controls="navbarPerfil"
-                    aria-expanded="false"
-                    aria-label="Abrir menu">
-                    <i class="bi bi-person-circle" style="font-size: 20px; color: var(--cor-texto-secundario);"></i>
-                </button>
-                <div class="collapse navbar-collapse justify-content-end" id="navbarPerfil">
-                    <div class="navbar-perfil">
-                        {{ nome_usuario }}<br>
-                        <a href="{{ url_for('logout') }}" class="link-logout">Sair</a>
+                <div class="dropdown">
+                    <button class="avatar-perfil-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Perfil">
+                        <span class="avatar-inicial">{{ nome_usuario[0] | upper }}</span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end dropdown-perfil">
+                        <div class="dropdown-perfil-header">{{ nome_usuario }}</div>
+
+                        <button class="dropdown-perfil-item" type="button" data-bs-toggle="collapse" data-bs-target="#form-trocar-senha">
+                            <i class="bi bi-key"></i> Trocar senha
+                        </button>
+                        <div class="collapse" id="form-trocar-senha">
+                            <form method="POST" action="{{ url_for('trocar_senha') }}" class="dropdown-perfil-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="proximo" value="{{ request.path }}">
+                                <input type="password" name="senha_atual" placeholder="Senha atual" class="admin-input w-100 mb-2" required>
+                                <input type="password" name="nova_senha" placeholder="Nova senha (mín. 8)" minlength="8" class="admin-input w-100 mb-2" required>
+                                <button type="submit" class="btn-secundario btn-mini w-100">Salvar nova senha</button>
+                            </form>
+                        </div>
+
+                        <a href="{{ url_for('logout') }}" class="dropdown-perfil-item link-logout-item">
+                            <i class="bi bi-box-arrow-right"></i> Sair
+                        </a>
                     </div>
                 </div>
             </div>
@@ -111,6 +120,13 @@
             <a href="{{ url_for('admin_tenants') }}">Tenants</a>
             <a href="{{ url_for('admin_auditoria') }}" class="ativo">Auditoria</a>
         </div>
+
+        {% for categoria, texto in get_flashed_messages(with_categories=true) %}
+            <div class="msg-base {{ 'msg-sucesso' if categoria == 'success' else 'msg-erro' }}" role="alert">
+                <i class="bi {{ 'bi-check-circle' if categoria == 'success' else 'bi-exclamation-circle' }} me-1"></i>
+                {{ texto }}
+            </div>
+        {% endfor %}
 
         <h4 class="titulo-resultado">Últimas ações (máx. 200)</h4>
 

@@ -301,6 +301,109 @@ h1, h2, h3, h4, h5, h6 {
     text-decoration: underline;
 }
 
+/* Avatar circular com a inicial do nome - usado no botão de perfil da
+   navbar e nas listas de usuários do admin */
+.avatar-inicial {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--cor-acento-fundo);
+    color: var(--cor-acento);
+    font-weight: 500;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+/* Botão que só existe pra abrir o dropdown de perfil - sem estilo
+   próprio de botão, o avatar é que fica visível */
+.avatar-perfil-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    line-height: 0;
+}
+
+/* Dropdown de perfil (Bootstrap) recolorido pro nosso tema - por
+   padrão o Bootstrap usa fundo claro/texto escuro fixos */
+.dropdown-perfil {
+    background-color: var(--cor-fundo-navbar) !important;
+    border: 0.5px solid var(--cor-borda) !important;
+    border-radius: 12px !important;
+    box-shadow: var(--sombra-login) !important;
+    min-width: 240px;
+    padding: 8px;
+}
+
+.dropdown-perfil-header {
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--cor-texto-primario) !important;
+    font-weight: 500;
+    border-bottom: 0.5px solid var(--cor-borda-divisor);
+    margin-bottom: 4px;
+}
+
+.dropdown-perfil-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: transparent !important;
+    border: none;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--cor-texto-secundario) !important;
+    border-radius: 8px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dropdown-perfil-item:hover {
+    background-color: var(--cor-fundo-hover) !important;
+    color: var(--cor-texto-primario) !important;
+}
+
+.dropdown-perfil-item.link-logout-item {
+    color: var(--cor-logout) !important;
+}
+
+.dropdown-perfil-item.link-logout-item:hover {
+    background-color: var(--cor-erro-fundo) !important;
+}
+
+.dropdown-perfil-form {
+    padding: 10px;
+}
+
+/* Inputs/selects fora do .form-consulta-wrapper - mesma aparência, tema-aware.
+   Usado nas telas de admin e no formulário de trocar senha da navbar. */
+.admin-input, .admin-select {
+    background-color: var(--cor-fundo-input) !important;
+    border: 0.5px solid var(--cor-borda) !important;
+    border-radius: 6px !important;
+    color: var(--cor-texto-primario) !important;
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+.admin-input:focus, .admin-select:focus {
+    border-color: var(--cor-borda-forte) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px var(--cor-acento-fundo) !important;
+}
+
+.btn-mini {
+    border-radius: 8px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    padding: 6px 12px !important;
+}
+
 
 /* ─────────────────────────────────────────────────────────────
    5. FORMULÁRIO DE CONSULTA

@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import psycopg2
 import requests
 from dotenv import load_dotenv
-from flask import Flask, abort, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf import CSRFProtect
@@ -100,6 +100,7 @@ ACOES_AUDITORIA_LABELS = {
     "criar_usuario": "Criou usuário",
     "editar_usuario": "Editou usuário",
     "redefinir_senha": "Redefiniu senha",
+    "trocar_senha_propria": "Trocou a própria senha",
     "ativar_usuario": "Ativou usuário",
     "desativar_usuario": "Desativou usuário",
     "excluir_usuario": "Excluiu usuário",
@@ -238,6 +239,51 @@ def logout():
     session.clear()
     app.logger.info(f"Usuário: '{nome}' Deslogou com sucesso")
     return redirect(url_for("login"))
+
+
+@app.route("/conta/trocar-senha", methods=["POST"])
+@login_required
+def trocar_senha():
+    senha_atual = request.form.get("senha_atual") or ""
+    nova_senha = request.form.get("nova_senha") or ""
+
+    # "proximo" volta o usuário pra página de onde veio (qualquer navbar).
+    # Só aceita caminho relativo do próprio site - nunca um destino
+    # controlado por quem envia o formulário (evita open redirect).
+    destino = request.form.get("proximo") or url_for("index")
+    if not destino.startswith("/") or destino.startswith("//"):
+        destino = url_for("index")
+
+    conn = None
+    try:
+        conn = get_conn()
+        cursor = dict_cursor(conn)
+        cursor.execute("SELECT id, password_hash FROM users WHERE email = %s", (session["usuario"],))
+        user = cursor.fetchone()
+
+        if not user or not check_password_hash(user["password_hash"], senha_atual):
+            flash("Senha atual incorreta.", "error")
+        elif len(nova_senha) < 8:
+            flash("A nova senha precisa ter pelo menos 8 caracteres.", "error")
+        else:
+            cursor.execute(
+                "UPDATE users SET password_hash = %s WHERE id = %s",
+                (generate_password_hash(nova_senha), user["id"]),
+            )
+            conn.commit()
+            registrar_auditoria("trocar_senha_propria", f"'{session['usuario']}'")
+            flash("Senha atualizada com sucesso.", "success")
+        cursor.close()
+    except Exception:
+        if conn:
+            conn.rollback()
+        app.logger.exception("Erro ao trocar a própria senha")
+        flash("Não foi possível trocar a senha. Tente novamente.", "error")
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(destino)
 
 
 @app.route("/", methods=["GET", "POST"])
