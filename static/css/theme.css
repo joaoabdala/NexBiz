@@ -758,6 +758,16 @@ footer .rodape-copy {
     color: var(--cor-rodape-texto);
 }
 
+footer .rodape-copy a {
+    color: var(--cor-acento);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+footer .rodape-copy a:hover {
+    text-decoration: underline;
+}
+
 footer .rodape-social a {
     color: var(--cor-social-icon);
     font-size: 16px;
