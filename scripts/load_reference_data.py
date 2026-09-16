@@ -49,7 +49,7 @@ def carregar_tabela(conn, tabela: str, colunas: list[str]) -> None:
     cur = conn.cursor()
     cur.execute(f"TRUNCATE TABLE {tabela} RESTART IDENTITY")
     colunas_sql = ", ".join(colunas)
-    # execute_values agrupa várias linhas por INSERT — muito mais rápido que
+    # execute_values agrupa várias linhas por INSERT - muito mais rápido que
     # executemany (uma linha por vez) para tabelas grandes como esta.
     psycopg2.extras.execute_values(
         cur, f"INSERT INTO {tabela} ({colunas_sql}) VALUES %s", linhas, page_size=2000

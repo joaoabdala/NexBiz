@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <!--
-    admin/tenants.html — CRUD de tenants (empresas clientes) — Abdala Nexus
+    admin/tenants.html - CRUD de tenants (empresas clientes) - Abdala Nexus
 -->
 <html lang="pt-br" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin — Tenants — Abdala Nexus</title>
+    <title>Admin - Tenants - Abdala Nexus</title>
 
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
 
@@ -33,8 +33,19 @@
         .conteudo-principal { padding: 2rem 0 3rem; flex: 1; }
         h4.titulo-resultado { font-size: 16px; font-weight: 500; color: var(--cor-texto-primario); margin: 0 0 1rem; }
 
-        .navbar-perfil a.link-admin { color: var(--cor-acento); text-decoration: none; font-size: 11px; }
-        .navbar-perfil a.link-admin:hover { text-decoration: underline; }
+        .admin-input {
+            background-color: var(--cor-fundo-input) !important;
+            border: 0.5px solid var(--cor-borda) !important;
+            border-radius: 6px !important;
+            color: var(--cor-texto-primario) !important;
+            font-size: 13px;
+            padding: 6px 10px;
+        }
+        .admin-input:focus {
+            border-color: var(--cor-borda-forte) !important;
+            outline: none !important;
+            box-shadow: 0 0 0 3px var(--cor-acento-fundo) !important;
+        }
 
         .btn-mini {
             border-radius: 8px !important;
@@ -43,11 +54,48 @@
             padding: 6px 12px !important;
         }
 
+        .acao-icone {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            border: 0.5px solid var(--cor-borda);
+            background: transparent;
+            color: var(--cor-texto-secundario);
+            cursor: pointer;
+            transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+        }
+        .acao-icone:hover {
+            border-color: var(--cor-borda-forte);
+            color: var(--cor-acento);
+            background-color: var(--cor-acento-fundo);
+        }
+        .acao-icone.perigo:hover {
+            border-color: var(--cor-erro);
+            color: var(--cor-erro);
+            background-color: var(--cor-erro-fundo);
+        }
+        .acao-icone[aria-expanded="true"] {
+            border-color: var(--cor-borda-forte);
+            color: var(--cor-acento);
+            background-color: var(--cor-acento-fundo);
+        }
+
         .linha-tenant {
             padding: 14px 16px;
             border-bottom: 0.5px solid var(--cor-borda-divisor);
         }
         .linha-tenant:last-child { border-bottom: none; }
+
+        .painel-inline {
+            background-color: var(--cor-fundo-hover);
+            border: 0.5px solid var(--cor-borda);
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 12px;
+        }
 
         .admin-tabs a {
             font-size: 13px;
@@ -71,9 +119,17 @@
                 Abdala Nexus<span class="navbar-logo-ponto">.</span>
             </a>
             <span class="navbar-titulo position-absolute start-50 translate-middle-x d-none d-md-block">
-                Admin — Tenants
+                Admin - Tenants
             </span>
             <div class="d-flex align-items-center gap-3 ms-auto">
+                <a href="{{ url_for('index') }}" class="btn-admin-nav">
+                    <i class="bi bi-search"></i>
+                    <span class="d-none d-sm-inline">Consultar CNPJ</span>
+                </a>
+                <button id="btn-tema" aria-label="Alternar tema">
+                    <i class="bi bi-sun" id="icone-tema"></i>
+                    <span id="texto-tema" class="d-none d-sm-inline">Claro</span>
+                </button>
                 <button
                     class="navbar-toggler border-0 p-0"
                     type="button"
@@ -87,8 +143,6 @@
                 <div class="collapse navbar-collapse justify-content-end" id="navbarPerfil">
                     <div class="navbar-perfil">
                         {{ nome_usuario }}<br>
-                        <a href="{{ url_for('index') }}" class="link-admin">Consultar CNPJ</a>
-                        ·
                         <a href="{{ url_for('logout') }}" class="link-logout">Sair</a>
                     </div>
                 </div>
@@ -114,48 +168,98 @@
             </div>
         {% endif %}
 
-        <!-- Criar tenant -->
-        <h4 class="titulo-resultado">Novo tenant</h4>
-        <div class="form-consulta-wrapper mb-4">
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="acao" value="criar">
-                <div class="row g-3 align-items-end">
-                    <div class="col-12 col-md-5">
-                        <label class="campo-label">Nome</label>
-                        <input type="text" name="nome" class="form-control" required>
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h4 class="titulo-resultado mb-0">Tenants cadastrados</h4>
+            <button
+                type="button"
+                class="btn-primario btn-mini"
+                data-bs-toggle="collapse"
+                data-bs-target="#form-novo-tenant"
+                aria-expanded="false"
+                aria-controls="form-novo-tenant">
+                <i class="bi bi-plus-lg me-1"></i> Novo tenant
+            </button>
+        </div>
+
+        <!-- Criar tenant - escondido até clicar em "Novo tenant" -->
+        <div class="collapse mb-4" id="form-novo-tenant">
+            <div class="form-consulta-wrapper">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="acao" value="criar">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-12 col-md-5">
+                            <label class="campo-label">Nome</label>
+                            <input type="text" name="nome" class="form-control" required>
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <label class="campo-label">Slug (identificador)</label>
+                            <input type="text" name="slug" class="form-control" placeholder="ex: abdala-nexus" required>
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <button type="submit" class="btn-primario w-100">Criar</button>
+                        </div>
                     </div>
-                    <div class="col-12 col-md-5">
-                        <label class="campo-label">Slug (identificador)</label>
-                        <input type="text" name="slug" class="form-control" placeholder="ex: abdala-nexus" required>
-                    </div>
-                    <div class="col-12 col-md-2">
-                        <button type="submit" class="btn-primario w-100">Criar</button>
-                    </div>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
 
         <!-- Lista de tenants -->
-        <h4 class="titulo-resultado">Tenants cadastrados</h4>
         <div class="card-resultado">
             {% for tenant in tenants %}
-                <div class="linha-tenant d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <div>
-                        <strong>{{ tenant.name }}</strong>
-                        <span class="texto-mono">{{ tenant.slug }}</span>
-                        <span class="tag {{ 'tag-ativa' if tenant.active else 'tag-inativa' }}">
-                            {{ 'Ativo' if tenant.active else 'Inativo' }}
-                        </span>
+                <div class="linha-tenant">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div>
+                            <strong>{{ tenant.name }}</strong>
+                            <span class="texto-mono">{{ tenant.slug }}</span>
+                            <span class="tag {{ 'tag-ativa' if tenant.active else 'tag-inativa' }}">
+                                {{ 'Ativo' if tenant.active else 'Inativo' }}
+                            </span>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="button" class="acao-icone" data-bs-toggle="collapse"
+                                    data-bs-target="#editar-tenant-{{ tenant.id }}" title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <form method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="acao" value="alternar_status">
+                                <input type="hidden" name="tenant_id" value="{{ tenant.id }}">
+                                <button type="submit" class="acao-icone" title="{{ 'Desativar' if tenant.active else 'Ativar' }}">
+                                    <i class="bi {{ 'bi-toggle-on' if tenant.active else 'bi-toggle-off' }}"></i>
+                                </button>
+                            </form>
+                            <form method="POST" onsubmit="return confirm('Excluir o tenant {{ tenant.name }}? Só é possível se não houver usuários vinculados.');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="acao" value="excluir">
+                                <input type="hidden" name="tenant_id" value="{{ tenant.id }}">
+                                <button type="submit" class="acao-icone perigo" title="Excluir">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
                     </div>
-                    <form method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="acao" value="alternar_status">
-                        <input type="hidden" name="tenant_id" value="{{ tenant.id }}">
-                        <button type="submit" class="btn-secundario btn-mini">
-                            {{ 'Desativar' if tenant.active else 'Ativar' }}
-                        </button>
-                    </form>
+
+                    <!-- Editar nome / slug -->
+                    <div class="collapse" id="editar-tenant-{{ tenant.id }}">
+                        <div class="painel-inline">
+                            <form method="POST" class="d-flex flex-wrap align-items-end gap-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="acao" value="editar">
+                                <input type="hidden" name="tenant_id" value="{{ tenant.id }}">
+                                <div>
+                                    <label class="campo-label">Nome</label>
+                                    <input type="text" name="nome" value="{{ tenant.name }}" class="admin-input">
+                                </div>
+                                <div>
+                                    <label class="campo-label">Slug</label>
+                                    <input type="text" name="slug" value="{{ tenant.slug }}" class="admin-input">
+                                </div>
+                                <button type="submit" class="btn-secundario btn-mini">Salvar</button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             {% else %}
                 <div class="linha-tenant">
@@ -167,5 +271,37 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Toggle de tema (dark/light) - mesma lógica do index.html/login.html -->
+    <script>
+        (function () {
+            const CHAVE_STORAGE = 'tema-afa';
+            const html          = document.documentElement;
+            const btnTema       = document.getElementById('btn-tema');
+            const iconeTema     = document.getElementById('icone-tema');
+            const textoTema     = document.getElementById('texto-tema');
+
+            const temaInicial = localStorage.getItem(CHAVE_STORAGE) || 'dark';
+            aplicarTema(temaInicial);
+
+            btnTema.addEventListener('click', function () {
+                const temaAtual = html.getAttribute('data-theme');
+                const novoTema  = temaAtual === 'dark' ? 'light' : 'dark';
+                aplicarTema(novoTema);
+                localStorage.setItem(CHAVE_STORAGE, novoTema);
+            });
+
+            function aplicarTema(tema) {
+                html.setAttribute('data-theme', tema);
+                if (tema === 'dark') {
+                    iconeTema.className  = 'bi bi-sun';
+                    textoTema.textContent = 'Claro';
+                } else {
+                    iconeTema.className  = 'bi bi-moon-stars';
+                    textoTema.textContent = 'Escuro';
+                }
+            }
+        })();
+    </script>
 </body>
 </html>

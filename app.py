@@ -5,6 +5,7 @@ import secrets
 from datetime import datetime, timedelta
 from functools import wraps
 
+import psycopg2
 import requests
 from dotenv import load_dotenv
 from flask import Flask, abort, redirect, render_template, request, session, url_for
@@ -19,21 +20,7 @@ from db import dict_cursor, get_conn
 
 load_dotenv()
 
-# 1) Defina aqui *todas* as substrings que você quer suprimir
-IGNORE_STRINGS = [
-    "GET",
-    "POST",
-]
-
-
-# 2) Filtro para ignorar determinadas strings
-class IgnoreStaticFilter(logging.Filter):
-    def filter(self, record):
-        msg = record.getMessage()
-        return not any(pat in msg for pat in IGNORE_STRINGS)
-
-
-# 3) Logging só em stdout — a Vercel captura automaticamente, e o
+# Logging só em stdout - a Vercel captura automaticamente, e o
 # filesystem lá é efêmero/somente-leitura, então não faz sentido gravar
 # em arquivo como antes (app_log.log).
 logging.basicConfig(
@@ -42,8 +29,12 @@ logging.basicConfig(
     datefmt="%d/%m/%Y %H:%M:%S",
     handlers=[logging.StreamHandler()],
 )
-for h in logging.root.handlers:
-    h.addFilter(IgnoreStaticFilter())
+
+# O log de acesso do Werkzeug (uma linha "GET/HEAD/POST ... HTTP/1.1 200 -"
+# por requisição, incluindo checagens automáticas de porta do editor) é
+# ruído — os eventos que importam (login, consulta de CNPJ, ações de admin)
+# já são logados explicitamente pelo app.logger abaixo.
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 app = Flask(__name__)
 
@@ -51,7 +42,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     SECRET_KEY = secrets.token_hex(32)
     logging.warning(
-        "SECRET_KEY não configurada no ambiente — usando uma chave temporária "
+        "SECRET_KEY não configurada no ambiente - usando uma chave temporária "
         "gerada em memória (sessões serão invalidadas a cada reinício). "
         "Configure SECRET_KEY antes de ir para produção."
     )
@@ -249,7 +240,7 @@ def index():
                                     resultado["simples"]["ultima_atualizacao_formatada"] = data_str
 
                             # INPI é consultado de forma assíncrona pelo frontend
-                            # via GET /consulta-inpi/<cnpj> — não bloqueia aqui
+                            # via GET /consulta-inpi/<cnpj> - não bloqueia aqui
 
             except requests.exceptions.RequestException:
                 app.logger.exception("Erro de conexão com a ReceitaWS")
@@ -300,7 +291,7 @@ def consulta_inpi_nome(nome):
 
 
 # ─────────────────────────────────────────────────────────────
-# ADMIN — CRUD de tenants e usuários
+# ADMIN - CRUD de tenants e usuários
 # ─────────────────────────────────────────────────────────────
 
 @app.route("/admin/tenants", methods=["GET", "POST"])
@@ -311,6 +302,7 @@ def admin_tenants():
 
     if request.method == "POST":
         acao = request.form.get("acao")
+        conn = None
         try:
             conn = get_conn()
             cursor = conn.cursor()
@@ -326,6 +318,20 @@ def admin_tenants():
                     registrar_auditoria("criar_tenant", f"nome={nome} slug={slug}")
                     mensagem = f"Tenant '{nome}' criado."
 
+            elif acao == "editar":
+                tenant_id = request.form.get("tenant_id")
+                nome = (request.form.get("nome") or "").strip()
+                slug = (request.form.get("slug") or "").strip().lower()
+                if not nome or not slug:
+                    erro = "Informe nome e identificador (slug) do tenant."
+                else:
+                    cursor.execute(
+                        "UPDATE tenants SET name = %s, slug = %s WHERE id = %s", (nome, slug, tenant_id)
+                    )
+                    conn.commit()
+                    registrar_auditoria("editar_tenant", f"tenant_id={tenant_id} nome={nome} slug={slug}")
+                    mensagem = "Tenant atualizado."
+
             elif acao == "alternar_status":
                 tenant_id = request.form.get("tenant_id")
                 cursor.execute("UPDATE tenants SET active = NOT active WHERE id = %s", (tenant_id,))
@@ -333,11 +339,30 @@ def admin_tenants():
                 registrar_auditoria("alternar_status_tenant", f"tenant_id={tenant_id}")
                 mensagem = "Status do tenant atualizado."
 
+            elif acao == "excluir":
+                tenant_id = request.form.get("tenant_id")
+                cursor.execute("DELETE FROM tenants WHERE id = %s", (tenant_id,))
+                conn.commit()
+                registrar_auditoria("excluir_tenant", f"tenant_id={tenant_id}")
+                mensagem = "Tenant excluído."
+
             cursor.close()
-            conn.close()
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            app.logger.warning("Slug de tenant duplicado")
+            erro = "Já existe um tenant com esse identificador (slug)."
+        except psycopg2.errors.ForeignKeyViolation:
+            conn.rollback()
+            app.logger.warning("Tentativa de excluir tenant com usuários vinculados")
+            erro = "Não é possível excluir: existem usuários vinculados a este tenant. Exclua ou mova os usuários primeiro."
         except Exception:
+            if conn:
+                conn.rollback()
             app.logger.exception("Erro ao gerenciar tenants")
             erro = "Não foi possível concluir a operação."
+        finally:
+            if conn:
+                conn.close()
 
     conn = get_conn()
     cursor = dict_cursor(conn)
@@ -364,6 +389,7 @@ def admin_usuarios():
 
     if request.method == "POST":
         acao = request.form.get("acao")
+        conn = None
         try:
             conn = get_conn()
             cursor = conn.cursor()
@@ -431,10 +457,18 @@ def admin_usuarios():
                 mensagem = "Usuário excluído."
 
             cursor.close()
-            conn.close()
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            app.logger.warning("E-mail de usuário duplicado")
+            erro = "Já existe um usuário com esse e-mail."
         except Exception:
+            if conn:
+                conn.rollback()
             app.logger.exception("Erro ao gerenciar usuários")
             erro = "Não foi possível concluir a operação."
+        finally:
+            if conn:
+                conn.close()
 
     conn = get_conn()
     cursor = dict_cursor(conn)
@@ -466,7 +500,7 @@ def admin_usuarios():
 
 
 # A app é servida via api/index.py na Vercel. Rodar direto (`python app.py`)
-# é só um atalho de conveniência local — nunca com debug=True aqui; use
+# é só um atalho de conveniência local - nunca com debug=True aqui; use
 # main.py (debug=False) para rodar localmente com dados reais.
 if __name__ == "__main__":
     app.run(debug=False)

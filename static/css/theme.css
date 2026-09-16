@@ -1,5 +1,5 @@
 /* =============================================================
-   theme.css — Identidade Visual LegalTech — Abdala Nexus Consultar CNPJ
+   theme.css - Identidade Visual LegalTech - Abdala Nexus Consultar CNPJ
    =============================================================
 
    ESTRUTURA DESTE ARQUIVO
@@ -43,6 +43,11 @@
    ───────────────────────────────────────────────────────────── */
 
 [data-theme="dark"] {
+    /* Avisa o navegador pra usar widgets nativos escuros (dropdown de
+       <select>, scrollbar, date picker etc.) - sem isso o menu que abre
+       ao clicar num <select> ignora nosso CSS e vem branco. */
+    color-scheme: dark;
+
     /* Fundos */
     --cor-fundo-pagina:      #0A0F1E;   /* fundo da página inteira */
     --cor-fundo-navbar:      #0D1425;   /* navbar e login card */
@@ -89,6 +94,8 @@
 }
 
 [data-theme="light"] {
+    color-scheme: light;
+
     /* Fundos */
     --cor-fundo-pagina:      #F7F9FC;
     --cor-fundo-navbar:      #FFFFFF;
@@ -251,7 +258,7 @@ h1, h2, h3, h4, h5, h6 {
     transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
-/* Logo: "Abdala Nexus." — o ponto é o acento ciano */
+/* Logo: "Abdala Nexus." - o ponto é o acento ciano */
 .navbar-logo-texto {
     font-size: 15px;
     font-weight: 500;
@@ -311,8 +318,9 @@ h1, h2, h3, h4, h5, h6 {
     transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
-/* Input principal — !important necessário para sobrescrever Bootstrap .form-control */
+/* Input principal - !important necessário para sobrescrever Bootstrap .form-control/.form-select */
 .form-consulta-wrapper .form-control,
+.form-consulta-wrapper .form-select,
 .form-consulta-wrapper input[type="text"] {
     background-color: var(--cor-fundo-input) !important;
     border: 0.5px solid var(--cor-borda) !important;
@@ -325,6 +333,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .form-consulta-wrapper .form-control:focus,
+.form-consulta-wrapper .form-select:focus,
 .form-consulta-wrapper input[type="text"]:focus {
     border-color: var(--cor-borda-forte) !important;
     outline: none !important;
@@ -380,7 +389,7 @@ h1, h2, h3, h4, h5, h6 {
     transform: scale(0.98);
 }
 
-/* Consultar — fundo acento, texto acento-texto */
+/* Consultar - fundo acento, texto acento-texto */
 .btn-primario {
     background-color: var(--cor-acento) !important;
     color: var(--cor-acento-texto) !important;
@@ -393,7 +402,7 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--cor-acento-texto) !important;
 }
 
-/* Validar Pessoa — fundo aviso */
+/* Validar Pessoa - fundo aviso */
 .btn-secundario {
     background-color: var(--cor-aviso-fundo) !important;
     color: var(--cor-aviso) !important;
@@ -406,7 +415,7 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--cor-aviso) !important;
 }
 
-/* Cadastrar / Atualizar — fundo sucesso */
+/* Cadastrar / Atualizar - fundo sucesso */
 .btn-positivo {
     background-color: var(--cor-sucesso-fundo) !important;
     color: var(--cor-sucesso) !important;
@@ -689,7 +698,8 @@ footer .btn-idioma:hover {
    O ícone muda via JS (sol / lua).
    ───────────────────────────────────────────────────────────── */
 
-#btn-tema {
+#btn-tema,
+.btn-admin-nav {
     background: transparent;
     border: 0.5px solid var(--cor-borda);
     border-radius: 8px;
@@ -700,13 +710,30 @@ footer .btn-idioma:hover {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    transition: border-color 0.15s ease, color 0.15s ease;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
     white-space: nowrap;
+    text-decoration: none;
 }
 
 #btn-tema:hover {
     border-color: var(--cor-borda-forte);
     color: var(--cor-acento);
+}
+
+/* Botão de acesso à área de admin - mesmo formato do toggle de tema,
+   com acento ciano pra se destacar como uma ação/atalho. */
+.btn-admin-nav {
+    border-color: var(--cor-borda-forte);
+    color: var(--cor-acento);
+}
+
+.btn-admin-nav:hover {
+    background-color: var(--cor-acento-fundo);
+    color: var(--cor-acento);
+}
+
+.btn-admin-nav.ativo {
+    background-color: var(--cor-acento-fundo);
 }
 
 
@@ -745,7 +772,7 @@ footer .btn-idioma:hover {
    Não há navbar nem rodapé nessa página.
    ───────────────────────────────────────────────────────────── */
 
-/* Body específico do login — centralizado verticalmente */
+/* Body específico do login - centralizado verticalmente */
 body.pagina-login {
     justify-content: center;
     align-items: center;
@@ -788,7 +815,7 @@ body.pagina-login {
     display: block;
 }
 
-/* Imagem da logo Abdala Nexus — exibida acima do nome */
+/* Imagem da logo Abdala Nexus - exibida acima do nome */
 .login-logo-img {
     width: 120px;
     height: auto;
@@ -803,6 +830,7 @@ body.pagina-login {
 }
 
 .login-card input[type="text"],
+.login-card input[type="email"],
 .login-card input[type="password"] {
     width: 100%;
     background-color: var(--cor-fundo-input);
@@ -816,6 +844,7 @@ body.pagina-login {
 }
 
 .login-card input[type="text"]:focus,
+.login-card input[type="email"]:focus,
 .login-card input[type="password"]:focus {
     border-color: var(--cor-borda-forte);
     box-shadow: 0 0 0 3px var(--cor-acento-fundo);
@@ -825,7 +854,18 @@ body.pagina-login {
     color: var(--cor-texto-inativo);
 }
 
-/* Botão de entrar — ocupa a largura total do card */
+/* Autofill do navegador (Chrome/Edge) tende a forçar fundo branco -
+   força a manter as cores do tema mesmo quando o campo é preenchido
+   automaticamente. */
+.login-card input:-webkit-autofill,
+.login-card input:-webkit-autofill:hover,
+.login-card input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--cor-texto-primario);
+    -webkit-box-shadow: 0 0 0 1000px var(--cor-fundo-input) inset;
+    transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Botão de entrar - ocupa a largura total do card */
 .login-card .btn-entrar {
     width: 100%;
     background-color: var(--cor-acento);
@@ -893,7 +933,7 @@ body.pagina-login {
         text-align: center;
     }
 
-    /* Label do strong dos itens de lista — remove min-width */
+    /* Label do strong dos itens de lista - remove min-width */
     .card-resultado .list-group-item strong {
         min-width: unset;
     }

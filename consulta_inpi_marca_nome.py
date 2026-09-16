@@ -26,10 +26,10 @@ URL_BUSCA = "https://busca.inpi.gov.br/pePI/servlet/MarcasServletController"
 
 # Campos fixos do formulário (confirmados pelo debug)
 PAYLOAD_BASE = {
-    "buscaExata":      "sim",   # primeiro radio — pesquisa exata
+    "buscaExata":      "sim",   # primeiro radio - pesquisa exata
     "txt":             "",
     "classeInter":     "",
-    "registerPerPage": "20",    # obrigatório — evita NumberFormatException
+    "registerPerPage": "20",    # obrigatório - evita NumberFormatException
     "botao":           "pesquisar",
     "Action":          "searchMarca",
     "tipoPesquisa":    "BY_MARCA_CLASSIF_BASICA",

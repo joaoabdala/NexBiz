@@ -1,4 +1,4 @@
-"""Acesso ao Postgres (Neon). Uma conexão por request — sem pool
+"""Acesso ao Postgres (Neon). Uma conexão por request - sem pool
 persistente em memória, já que a app roda em funções serverless (Vercel),
 onde cada invocação pode ser uma instância diferente."""
 import os

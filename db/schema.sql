@@ -1,5 +1,5 @@
--- Abdala Nexus — Consultar CNPJ
--- Schema Postgres (Neon). Idempotente — pode ser rodado mais de uma vez.
+-- Abdala Nexus - Consultar CNPJ
+-- Schema Postgres (Neon). Idempotente - pode ser rodado mais de uma vez.
 
 CREATE TABLE IF NOT EXISTS tenants (
     id          SERIAL PRIMARY KEY,
@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users (tenant_id);
 
 -- Dados de referência baixados do governo (regime tributário e Lei do Bem).
--- Globais — compartilhados entre todos os tenants, não têm tenant_id.
+-- Globais - compartilhados entre todos os tenants, não têm tenant_id.
 
 -- cnpj fica como TEXT (não VARCHAR(14)) porque a origem grava o CNPJ
--- formatado (ex.: "04.252.011/0001-10", 18 caracteres) — mesmo formato que
+-- formatado (ex.: "04.252.011/0001-10", 18 caracteres) - mesmo formato que
 -- a ReceitaWS devolve e que o app usa para o lookup (WHERE cnpj = %s).
 CREATE TABLE IF NOT EXISTS cnpj_tipo_tributacao (
     id               SERIAL PRIMARY KEY,

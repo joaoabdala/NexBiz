@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nexbiz-flask",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["main.py"],
+      "port": 5000
+    }
+  ]
+}

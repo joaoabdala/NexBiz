@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-    index.html — Página principal de consulta de CNPJ
+    index.html - Página principal de consulta de CNPJ
     ──────────────────────────────────────────────────
     Dependências:
       - static/css/theme.css   → identidade visual (dark/light)
@@ -21,7 +21,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consultar CNPJ — Abdala Nexus</title>
+    <title>Consultar CNPJ - Abdala Nexus</title>
 
     <!-- Favicon -->
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
@@ -37,11 +37,11 @@
     <!-- ► Identidade visual do projeto -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
 
-    <!-- Bootstrap CSS — carregado DEPOIS do theme.css para que nossos !important vençam -->
+    <!-- Bootstrap CSS - carregado DEPOIS do theme.css para que nossos !important vençam -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <!--
-        Script inline de tema — DEVE ficar aqui no <head>, antes de qualquer CSS.
+        Script inline de tema - DEVE ficar aqui no <head>, antes de qualquer CSS.
         Lê a preferência salva no localStorage e aplica o data-theme no <html>
         ANTES da página ser pintada, evitando o flash branco inicial.
     -->
@@ -59,7 +59,7 @@
         */
 
         /*
-            Override explícito do body — necessário porque o Bootstrap redefine
+            Override explícito do body - necessário porque o Bootstrap redefine
             background-color e color do body com alta especificidade.
             Estes valores espelham as variáveis do theme.css para dark e light.
         */
@@ -95,16 +95,6 @@
             color: var(--cor-texto-primario);
             margin: 0 0 1rem;
         }
-
-        /* Link "Admin" no menu de perfil — mesmo padrão do link-logout */
-        .navbar-perfil a.link-admin {
-            color: var(--cor-acento);
-            text-decoration: none;
-            font-size: 11px;
-        }
-        .navbar-perfil a.link-admin:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 
@@ -126,8 +116,16 @@
                 Consultar CNPJ
             </span>
 
-            <!-- Direita: toggle de tema + perfil do usuário + botão mobile -->
+            <!-- Direita: acesso admin + toggle de tema + perfil do usuário + botão mobile -->
             <div class="d-flex align-items-center gap-3 ms-auto">
+
+                <!-- Acesso à área de admin - só aparece pra quem tem role=admin -->
+                {% if is_admin %}
+                    <a href="{{ url_for('admin_usuarios') }}" class="btn-admin-nav" aria-label="Administração">
+                        <i class="bi bi-shield-lock"></i>
+                        <span class="d-none d-sm-inline">Admin</span>
+                    </a>
+                {% endif %}
 
                 <!-- Botão de alternância de tema -->
                 <button id="btn-tema" aria-label="Alternar tema">
@@ -151,10 +149,6 @@
                 <div class="collapse navbar-collapse justify-content-end" id="navbarPerfil">
                     <div class="navbar-perfil">
                         {{ nome_usuario }}<br>
-                        {% if is_admin %}
-                            <a href="{{ url_for('admin_usuarios') }}" class="link-admin">Admin</a>
-                            ·
-                        {% endif %}
                         <a href="{{ url_for('logout') }}" class="link-logout">Sair</a>
                     </div>
                 </div>
@@ -196,7 +190,7 @@
                                 id="cnpj"
                                 name="cnpj"
                                 value="{{ cnpj or '' }}"
-                                placeholder="Apenas números — ex: 04252011000110"
+                                placeholder="Apenas números - ex: 04252011000110"
                                 maxlength="18"
                                 autocomplete="off"
                                 required
@@ -207,7 +201,7 @@
                         <div class="col-12 col-md-auto">
                             <div class="acoes-formulario d-flex flex-wrap gap-2">
 
-                                <!-- Consultar — sempre visível -->
+                                <!-- Consultar - sempre visível -->
                                 <button type="submit" name="acao" value="consultar" class="btn-primario">
                                     <i class="bi bi-search me-1"></i> Consultar
                                 </button>
@@ -250,7 +244,7 @@
 
 
             <!-- ────────────────────────────────────────────────
-                 DADOS PRINCIPAIS — dois cards lado a lado
+                 DADOS PRINCIPAIS - dois cards lado a lado
                  ─────────────────────────────────────────────── -->
             <h4 class="titulo-resultado">Dados retornados da Receita</h4>
 
@@ -271,7 +265,7 @@
                             </li>
                             <li class="list-group-item">
                                 <strong>Fantasia</strong>
-                                <span>{{ resultado.fantasia or '—' }}</span>
+                                <span>{{ resultado.fantasia or '-' }}</span>
                             </li>
                             <li class="list-group-item">
                                 <strong>Situação</strong>
@@ -286,11 +280,11 @@
                             </li>
                             <li class="list-group-item">
                                 <strong>Telefone</strong>
-                                <span>{{ resultado.telefone or '—' }}</span>
+                                <span>{{ resultado.telefone or '-' }}</span>
                             </li>
                             <li class="list-group-item">
                                 <strong>E-mail</strong>
-                                <span>{{ resultado.email or '—' }}</span>
+                                <span>{{ resultado.email or '-' }}</span>
                             </li>
                             <li class="list-group-item">
                                 <strong>Tributação</strong>
@@ -355,21 +349,21 @@
                                 <span>{{ resultado.natureza_juridica }}</span>
                             </li>
                             <li class="list-group-item">
-                                <strong>Simples — Optante</strong>
+                                <strong>Simples - Optante</strong>
                                 <span class="tag {% if resultado.simples.optante %}tag-ativa{% else %}tag-inativa{% endif %}">
                                     {{ 'Sim' if resultado.simples.optante else 'Não' }}
                                 </span>
                             </li>
                             <li class="list-group-item">
-                                <strong>Simples — Início</strong>
-                                <span>{{ resultado.simples.data_opcao if resultado.simples.data_opcao else '—' }}</span>
+                                <strong>Simples - Início</strong>
+                                <span>{{ resultado.simples.data_opcao if resultado.simples.data_opcao else '-' }}</span>
                             </li>
                             <li class="list-group-item">
-                                <strong>Simples — Saída</strong>
-                                <span>{{ resultado.simples.data_exclusao if resultado.simples.data_exclusao else '—' }}</span>
+                                <strong>Simples - Saída</strong>
+                                <span>{{ resultado.simples.data_exclusao if resultado.simples.data_exclusao else '-' }}</span>
                             </li>
                             <li class="list-group-item">
-                                <strong>Simples — Atualização</strong>
+                                <strong>Simples - Atualização</strong>
                                 <span>{{ resultado.simples.ultima_atualizacao_formatada }}</span>
                             </li>
                         </ul>

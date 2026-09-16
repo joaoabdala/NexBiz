@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-    login.html — Página de login do sistema Consultar CNPJ
+    login.html - Página de login do sistema Consultar CNPJ
     ───────────────────────────────────────────────────────
     Dependências:
       - static/css/theme.css   → identidade visual (dark/light)
@@ -16,7 +16,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — Abdala Nexus</title>
+    <title>Login - Abdala Nexus</title>
 
     <!-- Favicon -->
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
@@ -29,14 +29,14 @@
     <!-- Bootstrap Icons (usados no tooltip e no botão de tema) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 
-    <!-- ► Identidade visual do projeto — todas as cores e estilos ficam aqui -->
+    <!-- ► Identidade visual do projeto - todas as cores e estilos ficam aqui -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
 
-    <!-- Bootstrap CSS — carregado DEPOIS do theme.css para que nossos !important vençam -->
+    <!-- Bootstrap CSS - carregado DEPOIS do theme.css para que nossos !important vençam -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <!--
-        Script inline de tema — DEVE ficar aqui no <head>, antes de qualquer CSS.
+        Script inline de tema - DEVE ficar aqui no <head>, antes de qualquer CSS.
         Lê a preferência salva no localStorage e aplica o data-theme no <html>
         ANTES da página ser pintada, evitando o flash branco inicial.
     -->
@@ -54,7 +54,7 @@
         */
 
         /*
-            Override explícito do body — necessário porque o Bootstrap redefine
+            Override explícito do body - necessário porque o Bootstrap redefine
             background-color do body. Espelha as variáveis do theme.css.
         */
         [data-theme="dark"] body {
@@ -188,7 +188,7 @@
          SCRIPTS
          ══════════════════════════════════════════════════════════ -->
 
-    <!-- Bootstrap JS — necessário para o Tooltip do campo Usuário -->
+    <!-- Bootstrap JS - necessário para o Tooltip do campo Usuário -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
@@ -221,7 +221,7 @@
 
             /**
              * Aplica o tema ao <html> e atualiza ícone + texto do botão.
-             * @param {string} tema — "dark" ou "light"
+             * @param {string} tema - "dark" ou "light"
              */
             function aplicarTema(tema) {
                 html.setAttribute('data-theme', tema);
