@@ -150,6 +150,10 @@ def gerar_xlsx(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, i
         celula = ws.cell(row=linha, column=1, value=f"{empresa} · Gerado por NexBiz (Abdala Nexus) em {agora}")
         celula.font = fonte_subtitulo
         celula.alignment = Alignment(vertical="center", horizontal="left", indent=1)
+        # Excel só permite um hyperlink por célula (não por trecho de
+        # texto) - como "Abdala Nexus" está dentro dessa mesma célula
+        # mesclada, o link cobre a linha inteira.
+        celula.hyperlink = "https://www.abdalanexus.com/"
         linha += 2
 
     def escrever_secao(titulo):
