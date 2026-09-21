@@ -1090,6 +1090,24 @@ footer .rodape-copy a:hover {
    ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
+    /* O Safari iOS dá zoom automático quando um campo de formulário
+       recebe foco e o font-size dele é menor que 16px (pra deixar o
+       texto legível enquanto digita) - foi isso que causava a
+       sensação de "abre com zoom": o campo de e-mail do login (e os
+       outros inputs do site) estavam em 14px/13px, abaixo do limite.
+       16px aqui é só pro mobile - no desktop o tamanho original
+       continua. */
+    .login-card input[type="text"],
+    .login-card input[type="email"],
+    .login-card input[type="password"],
+    .form-consulta-wrapper input[type="text"],
+    .form-consulta-wrapper .form-control,
+    .form-consulta-wrapper .form-select,
+    .admin-input,
+    .admin-select {
+        font-size: 16px;
+    }
+
     /* Login card ocupa quase toda a tela. Sem margin aqui: o
        .login-card já é width:100% do .login-card-wrapper (regra base),
        e o espaçamento das bordas da tela já vem do padding do body +
