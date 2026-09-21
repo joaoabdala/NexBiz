@@ -105,7 +105,7 @@ def _endereco_formatado(resultado) -> str:
 
 def _nome_arquivo(resultado, extensao: str) -> str:
     cnpj = (resultado.get("cnpj") or "cnpj").replace(".", "").replace("/", "").replace("-", "")
-    return f"consulta-cnpj-{cnpj}.{extensao}"
+    return f"nexbiz-cnpj-{cnpj}.{extensao}"
 
 
 # ─────────────────────────────────────────────────────────────
