@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users (tenant_id);
 
+-- Último login bem-sucedido (NULL = nunca logou). Gravado em login() no
+-- app.py. Instalações que já rodaram uma versão anterior deste schema
+-- ganham a coluna aqui.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
 -- Dados de referência baixados do governo (regime tributário e Lei do Bem).
 -- Globais - compartilhados entre todos os tenants, não têm tenant_id.
 

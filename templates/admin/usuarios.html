@@ -89,6 +89,12 @@
             background-color: var(--cor-acento-fundo);
         }
 
+        .ultimo-login {
+            font-size: 12px;
+            color: var(--cor-texto-inativo);
+            margin-top: 2px;
+        }
+
         .linha-usuario {
             padding: 14px 16px;
             border-bottom: 0.5px solid var(--cor-borda-divisor);
@@ -256,6 +262,14 @@
                             <div>
                                 <strong>{{ usuario.name }}</strong>
                                 <span class="texto-mono d-block">{{ usuario.email }}</span>
+                                <span class="ultimo-login d-block">
+                                    <i class="bi bi-clock-history me-1"></i>
+                                    {% if usuario.last_login_at %}
+                                        Último login: {{ usuario.last_login_at.strftime('%d/%m/%Y %H:%M') }}
+                                    {% else %}
+                                        Nunca fez login
+                                    {% endif %}
+                                </span>
                             </div>
                             <span class="tag tag-info">{{ usuario.tenant_name }}</span>
                             <span class="tag {{ 'tag-aviso' if usuario.role == 'admin' else 'tag-info' }}">{{ usuario.role }}</span>

@@ -221,6 +221,22 @@ def login():
                 session["perfil"] = user["role"]
                 session["tenant_id"] = user["tenant_id"]
                 session["tenant_nome"] = user["tenant_name"]
+
+                # Falha ao gravar o último login não pode derrubar um login
+                # que já foi validado - registra à parte, sem propagar erro.
+                try:
+                    conn2 = get_conn()
+                    cursor2 = conn2.cursor()
+                    cursor2.execute(
+                        "UPDATE users SET last_login_at = now() WHERE id = %s",
+                        (user["id"],),
+                    )
+                    conn2.commit()
+                    cursor2.close()
+                    conn2.close()
+                except Exception:
+                    app.logger.exception("Falha ao gravar last_login_at")
+
                 app.logger.info(f"Usuário '{user['email']}' logou com sucesso")
                 return redirect(url_for("index"))
             else:
@@ -669,7 +685,7 @@ def admin_usuarios():
         cursor = dict_cursor(conn)
         cursor.execute(
             """
-            SELECT u.id, u.name, u.email, u.role, u.active, u.created_at,
+            SELECT u.id, u.name, u.email, u.role, u.active, u.created_at, u.last_login_at,
                    t.id AS tenant_id, t.name AS tenant_name
             FROM users u
             JOIN tenants t ON t.id = u.tenant_id
@@ -677,6 +693,9 @@ def admin_usuarios():
             """
         )
         usuarios = cursor.fetchall()
+        for usuario in usuarios:
+            if usuario["last_login_at"]:
+                usuario["last_login_at"] = usuario["last_login_at"].astimezone(TZ_BRASILIA)
 
         cursor.execute("SELECT id, name FROM tenants WHERE active = true ORDER BY name")
         tenants = cursor.fetchall()
