@@ -419,11 +419,13 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
         canvas_obj.setFillColor(colors.HexColor(f"#{COR_NAVY_ESCURO}"))
         canvas_obj.rect(0, altura_pagina - 2.6 * cm, largura_pagina, 2.6 * cm, stroke=0, fill=1)
 
-        # Título e subtítulo (posições fixas; o logo é alinhado a partir
-        # delas mais abaixo, pro centro dele bater com o "R" do título).
-        y_titulo = altura_pagina - 1.55 * cm
-        y_subtitulo = altura_pagina - 2.15 * cm
-        x_texto = 2 * cm  # some 4cm à direita se o logo entrar
+        # O logo (com o fundo branco) é posicionado primeiro, com uma
+        # margem fixa a partir do topo da faixa - o título é alinhado
+        # a partir DELE depois (topo do texto == topo do badge branco),
+        # não o contrário como na tentativa anterior (que centralizava
+        # o título com o meio do logo - não era o que tinha sido pedido).
+        margem_topo_badge = 0.5 * cm
+        x_texto = 2 * cm  # sem logo, o texto cai na margem esquerda normal
 
         if caminho_logo:
             try:
@@ -440,23 +442,23 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
                 logo_altura = 0.95 * cm
                 logo_largura = logo_altura * proporcao
                 logo_x = 2 * cm
-                # Centraliza o logo verticalmente com o "R" de "Relatório"
-                # (aprox. baseline do título + metade da cap-height do
-                # Helvetica-Bold 16pt), não com a faixa do cabeçalho inteira.
-                centro_titulo = y_titulo + 0.2 * cm
-                logo_y = centro_titulo - logo_altura / 2
+
+                pad_h = 0.22 * cm
+                pad_v = 0.14 * cm
+                badge_altura = logo_altura + 2 * pad_v
+                badge_topo = altura_pagina - margem_topo_badge
+                badge_base = badge_topo - badge_altura
+                logo_y = badge_base + pad_v
 
                 # Fundo branco arredondado atrás do logo, igual ao site
                 # institucional (o lockup é escuro/ciano, sem isso ele some
                 # em cima da faixa navy do cabeçalho).
-                pad_h = 0.22 * cm
-                pad_v = 0.14 * cm
                 canvas_obj.setFillColor(colors.white)
                 canvas_obj.roundRect(
                     logo_x - pad_h,
-                    logo_y - pad_v,
+                    badge_base,
                     logo_largura + 2 * pad_h,
-                    logo_altura + 2 * pad_v,
+                    badge_altura,
                     radius=0.12 * cm,
                     stroke=0,
                     fill=1,
@@ -473,7 +475,15 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
 
                 x_texto = logo_x + logo_largura + 2 * pad_h + 0.5 * cm
             except Exception:
-                pass
+                badge_topo = altura_pagina - margem_topo_badge
+        else:
+            badge_topo = altura_pagina - margem_topo_badge
+
+        # Título: o topo do texto (baseline + cap-height do Helvetica-Bold
+        # 16pt, ~0.40cm) alinhado com o topo do badge branco.
+        cap_height_titulo = 0.40 * cm
+        y_titulo = badge_topo - cap_height_titulo
+        y_subtitulo = y_titulo - 0.6 * cm
 
         canvas_obj.setFillColor(colors.white)
         canvas_obj.setFont("Helvetica-Bold", 16)
