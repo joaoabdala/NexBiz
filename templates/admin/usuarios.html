@@ -197,6 +197,44 @@
             </div>
         {% endif %}
 
+        <!-- Filtros da listagem - GET, sem action (envia pra própria URL) -->
+        <form method="GET" class="filtros-usuarios mb-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-3">
+                    <label class="campo-label">Empresa</label>
+                    <select name="tenant_id" class="admin-select w-100" onchange="this.form.submit()">
+                        <option value="">Todas</option>
+                        {% for t in tenants %}
+                            <option value="{{ t.id }}" {% if t.id|string == filtro_tenant_id %}selected{% endif %}>{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="campo-label">Status</label>
+                    <select name="status" class="admin-select w-100" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <option value="ativo" {% if filtro_status == 'ativo' %}selected{% endif %}>Ativo</option>
+                        <option value="inativo" {% if filtro_status == 'inativo' %}selected{% endif %}>Inativo</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="campo-label">Role</label>
+                    <select name="role" class="admin-select w-100" onchange="this.form.submit()">
+                        <option value="">Todas</option>
+                        <option value="admin" {% if filtro_role == 'admin' %}selected{% endif %}>admin</option>
+                        <option value="user" {% if filtro_role == 'user' %}selected{% endif %}>user</option>
+                    </select>
+                </div>
+                {% if filtro_tenant_id or filtro_status or filtro_role %}
+                    <div class="col-6 col-md-2">
+                        <a href="{{ url_for('admin_usuarios') }}" class="btn-secundario btn-mini d-inline-block">
+                            <i class="bi bi-x-lg me-1"></i>Limpar filtros
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </form>
+
         <div class="d-flex align-items-center justify-content-between mb-3">
             <h4 class="titulo-resultado mb-0">Usuários cadastrados</h4>
             <button
@@ -355,7 +393,13 @@
                 </div>
             {% else %}
                 <div class="linha-usuario">
-                    <span class="msg-vazio">Nenhum usuário cadastrado ainda.</span>
+                    <span class="msg-vazio">
+                        {% if filtro_tenant_id or filtro_status or filtro_role %}
+                            Nenhum usuário encontrado com esses filtros.
+                        {% else %}
+                            Nenhum usuário cadastrado ainda.
+                        {% endif %}
+                    </span>
                 </div>
             {% endfor %}
         </div>

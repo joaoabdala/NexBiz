@@ -680,17 +680,45 @@ def admin_usuarios():
             if conn:
                 conn.close()
 
+    # Filtros da listagem (GET, via querystring - sobrevivem aos forms POST
+    # da própria tela porque eles não têm "action" e o navegador reenvia
+    # pra URL atual, querystring incluída).
+    filtro_tenant_id = request.args.get("tenant_id", "").strip()
+    if filtro_tenant_id and not filtro_tenant_id.isdigit():
+        filtro_tenant_id = ""
+    filtro_status = request.args.get("status", "").strip()
+    if filtro_status not in ("ativo", "inativo"):
+        filtro_status = ""
+    filtro_role = request.args.get("role", "").strip()
+    if filtro_role not in ("admin", "user"):
+        filtro_role = ""
+
+    condicoes = []
+    parametros = []
+    if filtro_tenant_id:
+        condicoes.append("t.id = %s")
+        parametros.append(filtro_tenant_id)
+    if filtro_status:
+        condicoes.append("u.active = %s")
+        parametros.append(filtro_status == "ativo")
+    if filtro_role:
+        condicoes.append("u.role = %s")
+        parametros.append(filtro_role)
+    where_sql = ("WHERE " + " AND ".join(condicoes)) if condicoes else ""
+
     conn = get_conn()
     try:
         cursor = dict_cursor(conn)
         cursor.execute(
-            """
+            f"""
             SELECT u.id, u.name, u.email, u.role, u.active, u.created_at, u.last_login_at,
                    t.id AS tenant_id, t.name AS tenant_name
             FROM users u
             JOIN tenants t ON t.id = u.tenant_id
+            {where_sql}
             ORDER BY t.name, u.name
-            """
+            """,
+            parametros,
         )
         usuarios = cursor.fetchall()
         for usuario in usuarios:
@@ -707,6 +735,9 @@ def admin_usuarios():
         "admin/usuarios.html",
         usuarios=usuarios,
         tenants=tenants,
+        filtro_tenant_id=filtro_tenant_id,
+        filtro_status=filtro_status,
+        filtro_role=filtro_role,
         erro=erro,
         mensagem=mensagem,
         nome_usuario=session["nome_exibicao"],
