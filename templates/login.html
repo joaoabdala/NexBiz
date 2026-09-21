@@ -81,22 +81,31 @@
         }
 
         /* Mesma técnica do login do NexGarage: um único container
-           position:relative + min-height:100vh que centraliza o card
-           (flex + align/justify-content:center), com o rodapé ancorado
-           via position:absolute no rodapé dele - em vez de "body em
-           coluna com flex:1 + rodapé", que depende de dois elementos
-           dividindo espaço via flex-grow e é onde os navegadores mobile
-           divergiam entre si. Sem flex-grow disputando espaço, não tem
-           o que dar errado mesmo se 100vh calcular um valor levemente
-           diferente da tela visível. */
+           position:relative + min-height que centraliza o card (flex +
+           align/justify-content:center), com o rodapé ancorado via
+           position:absolute no rodapé dele - em vez de "body em coluna
+           com flex:1 + rodapé", que dependia de dois elementos
+           dividindo espaço via flex-grow. */
+        html {
+            /* Trava o pan/scroll no elemento raiz também, não só no
+               body - se o body (filho) ficar maior que o html (pai)
+               em algum instante, sem isso o html ainda deixa arrastar
+               a página pros lados/baixo. */
+            overflow: hidden;
+        }
         body {
             position: relative;
-            /* min-height:100vh puro, sem nenhum ajuste via JS - é
-               exatamente o que o NexGarage usa (min-h-screen do
-               Tailwind) e funciona sem o "pulo" que a variável
-               --vh100 estava causando no rodapé/botão de tema ao
-               recalcular em cima de eventos de resize/zoom. */
+            /* min-height:100vh como fallback (navegadores sem suporte
+               a dvh) + min-height:100dvh por cima, que vence quando
+               suportado. 100vh sozinho, medido no aparelho real, deu
+               812px num estado em que só 660px estavam de fato
+               visíveis (barras do Safari ainda na tela) - ou seja,
+               100vh aqui usa a altura "grande" (sem as barras), não a
+               visível agora, e centralizava o card numa caixa 152px
+               maior que a tela, empurrando tudo pra cima do centro
+               real. 100dvh acompanha a altura visível de verdade. */
             min-height: 100vh;
+            min-height: 100dvh;
             display: flex;
             align-items: center;
             justify-content: center;
