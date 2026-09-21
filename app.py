@@ -323,7 +323,7 @@ def buscar_dados_empresa(cnpj: str):
         response = requests.get(url, headers=headers, timeout=10)
 
         if response.status_code == 429 or "too many requests" in response.text.lower():
-            erro = "Limite de consultas à ReceitaWS excedido. Aguarde um pouco e tente novamente."
+            erro = "Limite de consultas excedido temporariamente. Aguarde um pouco e tente novamente."
             app.logger.warning(f"Limite atingido: {response.text}")
         elif "application/json" not in response.headers.get("Content-Type", ""):
             erro = "Resposta da API não está em formato JSON."
