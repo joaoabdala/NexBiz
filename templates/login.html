@@ -59,23 +59,6 @@
             var tema = localStorage.getItem('tema-afa') || 'dark';
             document.documentElement.setAttribute('data-theme', tema);
         })();
-
-        // Altura real da tela via JS (--vh100), em vez de depender de
-        // unidades vh/dvh - alguns navegadores in-app (ex.: o do WhatsApp)
-        // nao calculam 100dvh direito e ficam presos na altura "grande"
-        // (com a barra de endereco escondida), descentralizando o layout.
-        // window.innerHeight funciona em qualquer navegador ha anos.
-        (function () {
-            function definirAlturaReal() {
-                document.documentElement.style.setProperty('--vh100', window.innerHeight + 'px');
-            }
-            definirAlturaReal();
-            window.addEventListener('resize', definirAlturaReal);
-            window.addEventListener('orientationchange', definirAlturaReal);
-            if (window.visualViewport) {
-                window.visualViewport.addEventListener('resize', definirAlturaReal);
-            }
-        })();
     </script>
 
     <style>
@@ -108,17 +91,12 @@
            diferente da tela visível. */
         body {
             position: relative;
+            /* min-height:100vh puro, sem nenhum ajuste via JS - é
+               exatamente o que o NexGarage usa (min-h-screen do
+               Tailwind) e funciona sem o "pulo" que a variável
+               --vh100 estava causando no rodapé/botão de tema ao
+               recalcular em cima de eventos de resize/zoom. */
             min-height: 100vh;
-            /* --vh100 (JS, window.innerHeight - ver script no head) no
-               lugar de 100vh puro quando disponível: em alguns
-               navegadores/WebViews o valor de 100vh não bate com a
-               altura realmente visível, então o rodapé (position:
-               absolute; bottom:0) fica ancorado além do que dá pra ver
-               sem rolar. Como agora não tem mais flex-grow disputando
-               espaço, esse ajuste só refina o valor, não é mais
-               essencial pra centralizar (isso já funciona só com
-               100vh). */
-            min-height: var(--vh100, 100vh);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -130,9 +108,13 @@
             overflow: hidden;
         }
 
-        /* Botão de tema fixo no canto da tela - independe do layout do card */
+        /* Botão de tema - position:absolute (não fixed), igual ao
+           ThemeToggle do NexGarage. Com fixed, o botão "flutuava" fora
+           de sincronia com o conteúdo durante pinch-zoom no Safari
+           iOS; absolute o mantém ancorado ao container (body), que é
+           o comportamento correto aqui já que a página não rola. */
         .login-tema-toggle {
-            position: fixed;
+            position: absolute;
             top: 20px;
             right: 24px;
             z-index: 20;
@@ -503,16 +485,18 @@
                     var el = document.querySelector(sel);
                     if (!el) return sel + ': não encontrado';
                     var r = el.getBoundingClientRect();
-                    return sel + ': top=' + Math.round(r.top) + ' bottom=' + Math.round(r.bottom) + ' height=' + Math.round(r.height);
+                    return sel + ': top=' + Math.round(r.top) + ' bottom=' + Math.round(r.bottom) + ' left=' + Math.round(r.left) + ' right=' + Math.round(r.right) + ' height=' + Math.round(r.height);
                 }
                 var linhas = [
                     'innerWidth x innerHeight: ' + window.innerWidth + ' x ' + window.innerHeight,
-                    'visualViewport.height: ' + (window.visualViewport ? Math.round(window.visualViewport.height) : 'sem suporte'),
+                    'visualViewport w x h: ' + (window.visualViewport ? Math.round(window.visualViewport.width) + ' x ' + Math.round(window.visualViewport.height) : 'sem suporte'),
+                    'visualViewport scale/offsetTop/offsetLeft: ' + (window.visualViewport ? window.visualViewport.scale.toFixed(2) + ' / ' + Math.round(window.visualViewport.offsetTop) + ' / ' + Math.round(window.visualViewport.offsetLeft) : 'sem suporte'),
+                    'window.scrollX/scrollY: ' + window.scrollX + ' / ' + window.scrollY,
                     'documentElement.clientHeight: ' + document.documentElement.clientHeight,
                     'body computed height: ' + getComputedStyle(document.body).height,
                     'body offsetHeight/scrollHeight: ' + document.body.offsetHeight + ' / ' + document.body.scrollHeight,
-                    '--vh100: ' + getComputedStyle(document.documentElement).getPropertyValue('--vh100'),
                     medir('.login-card-wrapper'),
+                    medir('.login-tema-toggle'),
                     medir('footer'),
                     'devicePixelRatio: ' + window.devicePixelRatio,
                 ];
