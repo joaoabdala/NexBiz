@@ -158,6 +158,15 @@
 html {
     /* Transição suave ao trocar de tema */
     transition: background-color 0.25s ease, color 0.25s ease;
+    /* Impede a "inflação automática de texto" do Safari/iOS: quando ele
+       acha que a página não foi pensada pra mobile, aumenta sozinho o
+       tamanho da fonte ao carregar - sem alterar o zoom do viewport
+       (visualViewport.scale continua 1.0), então parece que a página
+       "abriu com zoom" mesmo sem zoom nenhum de verdade. Frameworks como
+       o Tailwind (usado no NexGarage) já desligam isso por padrão no
+       próprio CSS reset; aqui nunca tinha sido desligado. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 body {
