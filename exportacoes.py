@@ -11,6 +11,7 @@ rede, só formatam o que já foi buscado.
 
 import io
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -39,6 +40,14 @@ COR_ERRO = "E24B4A"
 COR_TEXTO_SECUNDARIO = "7A8BA0"
 COR_CINZA_CLARO = "F0F4FA"
 COR_BORDA = "DCE3EC"
+
+# Servidor roda em UTC (Vercel) - "Gerado em ..." precisa do horário de
+# Brasília, senão o timestamp mostrado fica 3h à frente do real.
+TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
+
+
+def _agora_brasilia() -> datetime:
+    return datetime.now(TZ_BRASILIA)
 
 
 def _formatar_capital_social(valor) -> str:
@@ -136,7 +145,7 @@ def gerar_xlsx(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, i
         linha += 1
 
         ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=2)
-        agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+        agora = _agora_brasilia().strftime("%d/%m/%Y %H:%M")
         empresa = resultado.get("fantasia") or resultado.get("nome") or ""
         celula = ws.cell(row=linha, column=1, value=f"{empresa} · Gerado por NexBiz (Abdala Nexus) em {agora}")
         celula.font = fonte_subtitulo
@@ -374,7 +383,7 @@ class _NumberedCanvas(pdf_canvas.Canvas):
             largura - 2 * cm, 1.15 * cm, f"Página {self._pageNumber} de {total_paginas}"
         )
         self.drawRightString(
-            largura - 2 * cm, 0.75 * cm, datetime.now().strftime("Gerado em %d/%m/%Y %H:%M")
+            largura - 2 * cm, 0.75 * cm, _agora_brasilia().strftime("Gerado em %d/%m/%Y %H:%M")
         )
 
 
@@ -424,10 +433,29 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
                     pass
                 logo_altura = 0.62 * cm
                 logo_largura = logo_altura * proporcao
+                logo_x = 2 * cm
+                logo_y = altura_pagina - 0.62 * cm - logo_altura
+
+                # Fundo branco arredondado atrás do logo, igual ao site
+                # institucional (o lockup é escuro/ciano, sem isso ele some
+                # em cima da faixa navy do cabeçalho).
+                pad_h = 0.22 * cm
+                pad_v = 0.14 * cm
+                canvas_obj.setFillColor(colors.white)
+                canvas_obj.roundRect(
+                    logo_x - pad_h,
+                    logo_y - pad_v,
+                    logo_largura + 2 * pad_h,
+                    logo_altura + 2 * pad_v,
+                    radius=0.1 * cm,
+                    stroke=0,
+                    fill=1,
+                )
+
                 canvas_obj.drawImage(
                     caminho_logo,
-                    2 * cm,
-                    altura_pagina - 0.62 * cm - logo_altura,
+                    logo_x,
+                    logo_y,
                     width=logo_largura,
                     height=logo_altura,
                     mask="auto",
