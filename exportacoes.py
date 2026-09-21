@@ -419,6 +419,12 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
         canvas_obj.setFillColor(colors.HexColor(f"#{COR_NAVY_ESCURO}"))
         canvas_obj.rect(0, altura_pagina - 2.6 * cm, largura_pagina, 2.6 * cm, stroke=0, fill=1)
 
+        # Título e subtítulo (posições fixas; o logo é alinhado a partir
+        # delas mais abaixo, pro centro dele bater com o "R" do título).
+        y_titulo = altura_pagina - 1.55 * cm
+        y_subtitulo = altura_pagina - 2.15 * cm
+        x_texto = 2 * cm  # some 4cm à direita se o logo entrar
+
         if caminho_logo:
             try:
                 # Lockup horizontal (marca + "Abdala Nexus") - a proporção
@@ -431,10 +437,14 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
                         proporcao = _img.width / _img.height
                 except Exception:
                     pass
-                logo_altura = 0.62 * cm
+                logo_altura = 0.95 * cm
                 logo_largura = logo_altura * proporcao
                 logo_x = 2 * cm
-                logo_y = altura_pagina - 0.62 * cm - logo_altura
+                # Centraliza o logo verticalmente com o "R" de "Relatório"
+                # (aprox. baseline do título + metade da cap-height do
+                # Helvetica-Bold 16pt), não com a faixa do cabeçalho inteira.
+                centro_titulo = y_titulo + 0.2 * cm
+                logo_y = centro_titulo - logo_altura / 2
 
                 # Fundo branco arredondado atrás do logo, igual ao site
                 # institucional (o lockup é escuro/ciano, sem isso ele some
@@ -447,7 +457,7 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
                     logo_y - pad_v,
                     logo_largura + 2 * pad_h,
                     logo_altura + 2 * pad_v,
-                    radius=0.1 * cm,
+                    radius=0.12 * cm,
                     stroke=0,
                     fill=1,
                 )
@@ -460,15 +470,17 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
                     height=logo_altura,
                     mask="auto",
                 )
+
+                x_texto = logo_x + logo_largura + 2 * pad_h + 0.5 * cm
             except Exception:
                 pass
 
         canvas_obj.setFillColor(colors.white)
         canvas_obj.setFont("Helvetica-Bold", 16)
-        canvas_obj.drawString(2 * cm, altura_pagina - 1.9 * cm, "Relatório de Consulta CNPJ")
+        canvas_obj.drawString(x_texto, y_titulo, "Relatório de Consulta CNPJ")
         canvas_obj.setFont("Helvetica", 10)
         canvas_obj.setFillColor(colors.HexColor(f"#{COR_ACENTO}"))
-        canvas_obj.drawString(2 * cm, altura_pagina - 2.4 * cm, "Gerado por NexBiz - Abdala Nexus")
+        canvas_obj.drawString(x_texto, y_subtitulo, "Gerado por NexBiz - Abdala Nexus")
         canvas_obj.restoreState()
 
     doc.addPageTemplates([PageTemplate(id="padrao", frames=[frame], onPage=desenhar_cabecalho)])
