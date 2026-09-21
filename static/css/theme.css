@@ -1081,10 +1081,14 @@ footer .rodape-copy a:hover {
    ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
-    /* Login card ocupa quase toda a tela */
+    /* Login card ocupa quase toda a tela. Sem margin aqui: o
+       .login-card já é width:100% do .login-card-wrapper (regra base),
+       e o espaçamento das bordas da tela já vem do padding do body +
+       do wrapper - somar um margin:16px em cima de um width:100% fazia
+       o card ficar 32px mais largo que o espaço disponível, estourando
+       pra direita (por isso sobrava espaço grande só do lado esquerdo). */
     .login-card {
         max-width: 100%;
-        margin: 16px;
         padding: 28px 20px;
     }
 
