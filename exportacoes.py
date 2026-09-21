@@ -14,6 +14,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -147,7 +149,19 @@ def gerar_xlsx(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, i
         ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=2)
         agora = _agora_brasilia().strftime("%d/%m/%Y %H:%M")
         empresa = resultado.get("fantasia") or resultado.get("nome") or ""
-        celula = ws.cell(row=linha, column=1, value=f"{empresa} · Gerado por NexBiz (Abdala Nexus) em {agora}")
+
+        # Rich text: "Abdala Nexus" em ciano (mesmo acento do PDF), resto
+        # da linha na cor cinza normal do subtítulo - dá pra colorir só
+        # um trecho da célula (diferente do hyperlink, que é a célula
+        # inteira, já que o Excel não faz link por trecho de texto).
+        fonte_normal_inline = InlineFont(rFont="Calibri", sz=10, i=True, color=COR_TEXTO_SECUNDARIO)
+        fonte_link_inline = InlineFont(rFont="Calibri", sz=10, i=True, color=COR_ACENTO)
+        celula = ws.cell(row=linha, column=1)
+        celula.value = CellRichText(
+            TextBlock(fonte_normal_inline, f"{empresa} · Gerado por NexBiz ("),
+            TextBlock(fonte_link_inline, "Abdala Nexus"),
+            TextBlock(fonte_normal_inline, f") em {agora}"),
+        )
         celula.font = fonte_subtitulo
         celula.alignment = Alignment(vertical="center", horizontal="left", indent=1)
         # Excel só permite um hyperlink por célula (não por trecho de
