@@ -480,8 +480,10 @@ def gerar_pdf(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, in
             badge_topo = altura_pagina - margem_topo_badge
 
         # Título: o topo do texto (baseline + cap-height do Helvetica-Bold
-        # 16pt, ~0.40cm) alinhado com o topo do badge branco.
-        cap_height_titulo = 0.40 * cm
+        # 16pt) alinhado com o topo do badge branco. 0.40cm (cap-height
+        # "de livro") deixava o título um pouco acima do badge de verdade -
+        # 0.50cm bateu certo depois de medir pixel a pixel.
+        cap_height_titulo = 0.43 * cm
         y_titulo = badge_topo - cap_height_titulo
         y_subtitulo = y_titulo - 0.6 * cm
 
