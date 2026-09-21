@@ -123,11 +123,11 @@
             align-items: center;
             justify-content: center;
             padding: 16px;
-            /* O NexGarage usa overflow:hidden no container equivalente.
-               Aqui só no eixo horizontal (nunca deveria existir rolagem
-               pros lados nessa página) - deixa o vertical livre, caso
-               uma tela muito baixa precise mesmo rolar pra ver tudo. */
-            overflow-x: hidden;
+            /* overflow:hidden nos dois eixos - exatamente como o
+               container equivalente do NexGarage (`overflow-hidden`
+               no className). Foi conferindo o código-fonte real deles
+               que vi isso, em vez de ficar adivinhando pelo comportamento. */
+            overflow: hidden;
         }
 
         /* Botão de tema fixo no canto da tela - independe do layout do card */
@@ -144,12 +144,6 @@
             align-items: center;
             justify-content: center;
             gap: 72px;
-            /* O NexGarage não centraliza 100% matemático - o card real
-               deles fica ~16px mais pra baixo do centro exato (conferi
-               no computed style: transform: translateY(16px)), provável
-               ajuste visual pra compensar o botão de tema fixo no topo.
-               Replicando o mesmo deslocamento aqui. */
-            transform: translateY(16px);
         }
 
         /* Ancorado no fundo do body (position:relative) - ver comentário
