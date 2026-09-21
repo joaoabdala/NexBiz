@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import psycopg2
 import requests
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf import CSRFProtect
@@ -18,6 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from consulta_inpi_marca_nome import possui_marca_por_nome
 from consulta_inpi_marcas import possui_marca_no_inpi
 from db import dict_cursor, get_conn
+from exportacoes import gerar_pdf, gerar_xlsx
 
 load_dotenv()
 
@@ -302,6 +303,114 @@ def trocar_senha():
     return redirect(destino)
 
 
+def buscar_dados_empresa(cnpj: str):
+    """Busca os dados de um CNPJ na ReceitaWS + tributação/Lei do Bem no
+    Postgres. Usada tanto pela consulta principal (index) quanto pelas
+    exportações (PDF/XLSX), pra não duplicar essa lógica.
+
+    Retorna (resultado, erro, msg_tp_tributacao, msg_lei_do_bem) - "resultado"
+    vem None se "erro" estiver preenchido.
+    """
+    url = f"https://www.receitaws.com.br/v1/cnpj/{cnpj}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    resultado = None
+    erro = None
+    msg_tp_tributacao = None
+    msg_lei_do_bem = None
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code == 429 or "too many requests" in response.text.lower():
+            erro = "Limite de consultas à ReceitaWS excedido. Aguarde um pouco e tente novamente."
+            app.logger.warning(f"Limite atingido: {response.text}")
+        elif "application/json" not in response.headers.get("Content-Type", ""):
+            erro = "Resposta da API não está em formato JSON."
+            app.logger.error(f"Status: {response.status_code}, Conteúdo: {response.text}")
+        else:
+            try:
+                data = response.json()
+            except (ValueError, json.JSONDecodeError):
+                app.logger.exception("Erro ao decodificar resposta da ReceitaWS")
+                erro = "Não foi possível interpretar a resposta da ReceitaWS."
+                data = None
+
+            if data is not None:
+                if data.get("status") != "OK":
+                    erro = data.get("message", "Erro desconhecido ao consultar a API da ReceitaWS.")
+                    app.logger.warning(f"Resposta inválida: {data}")
+                else:
+                    resultado = data
+
+                    # Busca separada dos dados de referência (tributação/Lei do
+                    # Bem): se o Postgres falhar aqui, os dados da Receita já
+                    # obtidos continuam sendo exibidos normalmente - só esses
+                    # dois campos caem num aviso, em vez de renderizar "None"
+                    # ou derrubar a consulta inteira.
+                    msg_tp_tributacao = "Não foi possível verificar a tributação."
+                    msg_lei_do_bem = "Não foi possível verificar a Lei do Bem."
+                    conn_ref = None
+                    try:
+                        conn_ref = get_conn()
+                        cursor_ref = conn_ref.cursor()
+
+                        cursor_ref.execute(
+                            """
+                            SELECT string_agg(
+                                CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.tipo_tributacao,
+                                ' | '
+                            )
+                            FROM cnpj_tipo_tributacao c
+                            WHERE c.cnpj = %s
+                            """,
+                            (data.get("cnpj"),),
+                        )
+                        linha = cursor_ref.fetchone()
+                        msg_tp_tributacao = linha[0] if linha and linha[0] else "Tributação não identificada"
+
+                        cursor_ref.execute(
+                            """
+                            SELECT string_agg(
+                                CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.uf,
+                                ' | '
+                            )
+                            FROM cnpj_lei_do_bem c
+                            WHERE c.cnpj = %s
+                            """,
+                            (data.get("cnpj"),),
+                        )
+                        linha_lei_do_bem = cursor_ref.fetchone()
+                        msg_lei_do_bem = (
+                            linha_lei_do_bem[0] if linha_lei_do_bem and linha_lei_do_bem[0] else "Lei do Bem não identificada"
+                        )
+
+                        cursor_ref.close()
+                    except Exception:
+                        app.logger.exception("Erro ao buscar tributação/Lei do Bem")
+                    finally:
+                        if conn_ref:
+                            conn_ref.close()
+
+                    if "simples" in resultado:
+                        data_str = resultado["simples"].get("ultima_atualizacao", "").replace("Z", "")
+                        try:
+                            resultado["simples"]["ultima_atualizacao_formatada"] = datetime.fromisoformat(
+                                data_str
+                            ).strftime("%d/%m/%Y %H:%M")
+                        except ValueError:
+                            resultado["simples"]["ultima_atualizacao_formatada"] = data_str
+
+    except requests.exceptions.RequestException:
+        app.logger.exception("Erro de conexão com a ReceitaWS")
+        erro = "Não foi possível conectar à ReceitaWS. Tente novamente em instantes."
+    except Exception:
+        app.logger.exception("Erro inesperado ao consultar CNPJ")
+        erro = "Ocorreu um erro inesperado ao consultar o CNPJ. Tente novamente."
+
+    return resultado, erro, msg_tp_tributacao, msg_lei_do_bem
+
+
 @app.route("/", methods=["GET", "POST"])
 @login_required
 def index():
@@ -319,103 +428,13 @@ def index():
         if not cnpj.isdigit() or len(cnpj) != 14:
             erro = "Informe um CNPJ válido: apenas números, com 14 dígitos."
         elif acao == "consultar":
-            url = f"https://www.receitaws.com.br/v1/cnpj/{cnpj}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-
-            try:
-                response = requests.get(url, headers=headers, timeout=10)
-
-                if response.status_code == 429 or "too many requests" in response.text.lower():
-                    erro = "Limite de consultas à ReceitaWS excedido. Aguarde um pouco e tente novamente."
-                    app.logger.warning(f"Limite atingido: {response.text}")
-                elif "application/json" not in response.headers.get("Content-Type", ""):
-                    erro = "Resposta da API não está em formato JSON."
-                    app.logger.error(f"Status: {response.status_code}, Conteúdo: {response.text}")
-                else:
-                    try:
-                        data = response.json()
-                    except (ValueError, json.JSONDecodeError):
-                        app.logger.exception("Erro ao decodificar resposta da ReceitaWS")
-                        erro = "Não foi possível interpretar a resposta da ReceitaWS."
-                        data = None
-
-                    if data is not None:
-                        if data.get("status") != "OK":
-                            erro = data.get("message", "Erro desconhecido ao consultar a API da ReceitaWS.")
-                            app.logger.warning(f"Resposta inválida: {data}")
-                        else:
-                            resultado = data
-                            app.logger.info(
-                                f"Usuário: '{nome_usuario}' Realizou uma consulta com sucesso. CNPJ: '{data['cnpj']}'"
-                            )
-
-                            # Busca separada dos dados de referência (tributação/Lei do
-                            # Bem): se o Postgres falhar aqui, os dados da Receita já
-                            # obtidos continuam sendo exibidos normalmente - só esses
-                            # dois campos caem num aviso, em vez de renderizar "None"
-                            # ou derrubar a consulta inteira.
-                            msg_tp_tributacao = "Não foi possível verificar a tributação."
-                            msg_lei_do_bem = "Não foi possível verificar a Lei do Bem."
-                            conn_ref = None
-                            try:
-                                conn_ref = get_conn()
-                                cursor_ref = conn_ref.cursor()
-
-                                cursor_ref.execute(
-                                    """
-                                    SELECT string_agg(
-                                        CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.tipo_tributacao,
-                                        ' | '
-                                    )
-                                    FROM cnpj_tipo_tributacao c
-                                    WHERE c.cnpj = %s
-                                    """,
-                                    (data.get("cnpj"),),
-                                )
-                                linha = cursor_ref.fetchone()
-                                msg_tp_tributacao = linha[0] if linha and linha[0] else "Tributação não identificada"
-
-                                cursor_ref.execute(
-                                    """
-                                    SELECT string_agg(
-                                        CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.uf,
-                                        ' | '
-                                    )
-                                    FROM cnpj_lei_do_bem c
-                                    WHERE c.cnpj = %s
-                                    """,
-                                    (data.get("cnpj"),),
-                                )
-                                linha_lei_do_bem = cursor_ref.fetchone()
-                                msg_lei_do_bem = (
-                                    linha_lei_do_bem[0] if linha_lei_do_bem and linha_lei_do_bem[0] else "Lei do Bem não identificada"
-                                )
-
-                                cursor_ref.close()
-                            except Exception:
-                                app.logger.exception("Erro ao buscar tributação/Lei do Bem")
-                            finally:
-                                if conn_ref:
-                                    conn_ref.close()
-
-                            if "simples" in resultado:
-                                data_str = resultado["simples"].get("ultima_atualizacao", "").replace("Z", "")
-                                try:
-                                    resultado["simples"]["ultima_atualizacao_formatada"] = datetime.fromisoformat(
-                                        data_str
-                                    ).strftime("%d/%m/%Y %H:%M")
-                                except ValueError:
-                                    resultado["simples"]["ultima_atualizacao_formatada"] = data_str
-
-                            # INPI é consultado de forma assíncrona pelo frontend
-                            # via GET /consulta-inpi/<cnpj> - não bloqueia aqui
-
-            except requests.exceptions.RequestException:
-                app.logger.exception("Erro de conexão com a ReceitaWS")
-                erro = "Não foi possível conectar à ReceitaWS. Tente novamente em instantes."
-            except Exception:
-                app.logger.exception("Erro inesperado ao consultar CNPJ")
-                erro = "Ocorreu um erro inesperado ao consultar o CNPJ. Tente novamente."
+            resultado, erro, msg_tp_tributacao, msg_lei_do_bem = buscar_dados_empresa(cnpj)
+            if resultado:
+                app.logger.info(
+                    f"Usuário: '{nome_usuario}' Realizou uma consulta com sucesso. CNPJ: '{resultado['cnpj']}'"
+                )
+            # INPI é consultado de forma assíncrona pelo frontend
+            # via GET /consulta-inpi/<cnpj> - não bloqueia aqui
 
     return render_template(
         "index.html",
@@ -456,6 +475,71 @@ def consulta_inpi_nome(nome):
     except Exception as e:
         logging.warning(f"Falha na consulta INPI por nome '{nome}': {e}")
         return {"erro": "Não foi possível consultar o INPI no momento."}, 200
+
+
+def _preparar_exportacao():
+    """Lê CNPJ + status do INPI (já resolvido no navegador, de forma
+    assíncrona) do form da exportação, e busca de novo os dados da
+    ReceitaWS/tributação/Lei do Bem - são rápidos, então não vale a pena
+    serializar o resultado inteiro num campo hidden. O INPI é lento (é
+    scraping) e por isso reaproveita o que o frontend já resolveu, em vez
+    de consultar de novo.
+
+    Retorna (resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status,
+    inpi_nome_status) ou None se o CNPJ for inválido ou a busca falhar -
+    nesse caso já cuida do flash message."""
+    cnpj = (request.form.get("cnpj") or "").strip().replace(".", "").replace("/", "").replace("-", "")
+    if not cnpj.isdigit() or len(cnpj) != 14:
+        flash("CNPJ inválido para exportação.", "error")
+        return None
+
+    resultado, erro, msg_tp_tributacao, msg_lei_do_bem = buscar_dados_empresa(cnpj)
+    if not resultado:
+        flash(erro or "Não foi possível gerar a exportação.", "error")
+        return None
+
+    inpi_cnpj_status = request.form.get("inpi_cnpj_status", "")
+    inpi_nome_status = request.form.get("inpi_nome_status", "")
+    return resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, inpi_nome_status
+
+
+@app.route("/exportar/xlsx", methods=["POST"])
+@login_required
+def exportar_xlsx():
+    dados = _preparar_exportacao()
+    if dados is None:
+        return redirect(url_for("index"))
+    resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, inpi_nome_status = dados
+
+    buffer, nome_arquivo = gerar_xlsx(resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, inpi_nome_status)
+    app.logger.info(f"Usuário: '{session['nome_exibicao']}' exportou XLSX. CNPJ: '{resultado['cnpj']}'")
+
+    return Response(
+        buffer.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
+
+
+@app.route("/exportar/pdf", methods=["POST"])
+@login_required
+def exportar_pdf():
+    dados = _preparar_exportacao()
+    if dados is None:
+        return redirect(url_for("index"))
+    resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, inpi_nome_status = dados
+
+    caminho_logo = os.path.join(app.root_path, "static", "images", "logo-lockup.png")
+    buffer, nome_arquivo = gerar_pdf(
+        resultado, msg_tp_tributacao, msg_lei_do_bem, inpi_cnpj_status, inpi_nome_status, caminho_logo=caminho_logo
+    )
+    app.logger.info(f"Usuário: '{session['nome_exibicao']}' exportou PDF. CNPJ: '{resultado['cnpj']}'")
+
+    return Response(
+        buffer.getvalue(),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
 
 
 # ─────────────────────────────────────────────────────────────

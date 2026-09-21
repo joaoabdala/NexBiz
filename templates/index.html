@@ -286,7 +286,36 @@
             <!-- ────────────────────────────────────────────────
                  DADOS PRINCIPAIS - dois cards lado a lado
                  ─────────────────────────────────────────────── -->
-            <h4 class="titulo-resultado">Dados retornados da Receita</h4>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+                <h4 class="titulo-resultado mb-0">Dados retornados da Receita</h4>
+
+                <!--
+                    Exportações - reconsultam a ReceitaWS/tributação/Lei do
+                    Bem no servidor (são rápidas), mas reaproveitam o status
+                    do INPI que o JS abaixo já resolveu de forma assíncrona
+                    (é scraping, lento - não vale reconsultar de novo aqui).
+                -->
+                <div class="d-flex gap-2">
+                    <form method="POST" action="{{ url_for('exportar_xlsx') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="cnpj" value="{{ resultado.cnpj }}">
+                        <input type="hidden" name="inpi_cnpj_status" class="campo-status-inpi-cnpj" value="">
+                        <input type="hidden" name="inpi_nome_status" class="campo-status-inpi-nome" value="">
+                        <button type="submit" class="btn-secundario btn-mini">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Exportar XLSX
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('exportar_pdf') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="cnpj" value="{{ resultado.cnpj }}">
+                        <input type="hidden" name="inpi_cnpj_status" class="campo-status-inpi-cnpj" value="">
+                        <input type="hidden" name="inpi_nome_status" class="campo-status-inpi-nome" value="">
+                        <button type="submit" class="btn-secundario btn-mini">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF
+                        </button>
+                    </form>
+                </div>
+            </div>
 
             <div class="row g-3">
 
@@ -617,6 +646,15 @@
             // Usa fantasia se disponível; senão usa o nome da empresa
             var nomeEncoded = encodeURIComponent(fantasia || "{{ resultado.nome }}");
 
+            // Reflete o status resolvido nos campos hidden dos forms de
+            // exportação (XLSX/PDF), pra eles saírem com o mesmo resultado
+            // de INPI que está na tela, sem precisar reconsultar (é lento).
+            function definirStatusInpi(classe, valor) {
+                document.querySelectorAll('.' + classe).forEach(function (el) {
+                    el.value = valor;
+                });
+            }
+
             // ── 1. Consulta INPI por CNPJ ──────────────────────
             var elCnpj = document.getElementById('inpi-resultado');
             if (elCnpj) {
@@ -625,14 +663,18 @@
                     .then(function (data) {
                         if (data.erro) {
                             elCnpj.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                            definirStatusInpi('campo-status-inpi-cnpj', 'erro');
                         } else if (data.possui_marca) {
                             elCnpj.innerHTML = '<span class="inpi-positivo"><i class="bi bi-check-circle me-1"></i>Possui marca registrada</span>';
+                            definirStatusInpi('campo-status-inpi-cnpj', 'sim');
                         } else {
                             elCnpj.innerHTML = '<span class="inpi-negativo"><i class="bi bi-dash-circle me-1"></i>Sem marca registrada</span>';
+                            definirStatusInpi('campo-status-inpi-cnpj', 'nao');
                         }
                     })
                     .catch(function () {
                         elCnpj.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                        definirStatusInpi('campo-status-inpi-cnpj', 'erro');
                     });
             }
 
@@ -644,14 +686,18 @@
                     .then(function (data) {
                         if (data.erro) {
                             elNome.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                            definirStatusInpi('campo-status-inpi-nome', 'erro');
                         } else if (data.possui_marca) {
                             elNome.innerHTML = '<span class="inpi-positivo"><i class="bi bi-check-circle me-1"></i>Marca encontrada pelo nome</span>';
+                            definirStatusInpi('campo-status-inpi-nome', 'sim');
                         } else {
                             elNome.innerHTML = '<span class="inpi-negativo"><i class="bi bi-dash-circle me-1"></i>Nenhuma marca encontrada pelo nome</span>';
+                            definirStatusInpi('campo-status-inpi-nome', 'nao');
                         }
                     })
                     .catch(function () {
                         elNome.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
+                        definirStatusInpi('campo-status-inpi-nome', 'erro');
                     });
             }
         })();
