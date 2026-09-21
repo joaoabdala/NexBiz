@@ -493,43 +493,5 @@
         });
     </script>
 
-    <!-- ─────────────────────────────────────────────────────────
-         PAINEL DE DIAGNÓSTICO TEMPORÁRIO (?debug=1)
-         ─────────────────────────────────────────────────────────
-         Só aparece com ?debug=1 na URL. Mostra os valores reais que
-         o navegador calculou, pra investigar o bug de centralização
-         no mobile sem precisar ficar adivinhando. Remover depois.
-         ───────────────────────────────────────────────────────── -->
-    <script>
-        if (new URLSearchParams(location.search).get('debug') === '1') {
-            (function () {
-                function medir(sel) {
-                    var el = document.querySelector(sel);
-                    if (!el) return sel + ': não encontrado';
-                    var r = el.getBoundingClientRect();
-                    return sel + ': top=' + Math.round(r.top) + ' bottom=' + Math.round(r.bottom) + ' left=' + Math.round(r.left) + ' right=' + Math.round(r.right) + ' height=' + Math.round(r.height);
-                }
-                var linhas = [
-                    'innerWidth x innerHeight: ' + window.innerWidth + ' x ' + window.innerHeight,
-                    'visualViewport w x h: ' + (window.visualViewport ? Math.round(window.visualViewport.width) + ' x ' + Math.round(window.visualViewport.height) : 'sem suporte'),
-                    'visualViewport scale/offsetTop/offsetLeft: ' + (window.visualViewport ? window.visualViewport.scale.toFixed(2) + ' / ' + Math.round(window.visualViewport.offsetTop) + ' / ' + Math.round(window.visualViewport.offsetLeft) : 'sem suporte'),
-                    'window.scrollX/scrollY: ' + window.scrollX + ' / ' + window.scrollY,
-                    'documentElement.clientHeight: ' + document.documentElement.clientHeight,
-                    'body computed height: ' + getComputedStyle(document.body).height,
-                    'body offsetHeight/scrollHeight: ' + document.body.offsetHeight + ' / ' + document.body.scrollHeight,
-                    medir('.login-card-wrapper'),
-                    medir('.login-card'),
-                    medir('.login-tema-toggle'),
-                    medir('footer'),
-                    'devicePixelRatio: ' + window.devicePixelRatio,
-                ];
-                var caixa = document.createElement('div');
-                caixa.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#000;color:#0f0;font:11px monospace;padding:10px;border-radius:8px;max-width:90vw;white-space:pre-wrap;opacity:0.95;';
-                caixa.textContent = linhas.join('\n');
-                document.body.appendChild(caixa);
-            })();
-        }
-    </script>
-
 </body>
 </html>
