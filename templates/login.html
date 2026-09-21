@@ -95,6 +95,19 @@
         }
         body {
             position: relative;
+            /* O theme.css (global, todas as páginas) define "height"
+               (não min-height) no body de propósito, pro layout em
+               coluna com flex-grow do index.html/admin funcionar no
+               WebKit - ver comentário lá. Só que "height" e
+               "min-height" convivem: se height calcular um valor
+               maior, é ele quem vence, mesmo com um min-height menor
+               definido depois. Por isso o min-height:100dvh abaixo não
+               tinha efeito nenhum aqui - o height:100vh global (812px
+               no aparelho testado) continuava sendo o valor real.
+               "height:auto" cancela isso só nesta página, deixando o
+               min-height ser quem manda (mesmo padrão do NexGarage,
+               que nunca define height no body, só min-height). */
+            height: auto;
             /* min-height:100vh como fallback (navegadores sem suporte
                a dvh) + min-height:100dvh por cima, que vence quando
                suportado. 100vh sozinho, medido no aparelho real, deu
