@@ -8,6 +8,7 @@ from functools import wraps
 from zoneinfo import ZoneInfo
 
 import psycopg2
+import redis
 import requests
 from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
@@ -124,6 +125,39 @@ if not REDIS_URL:
         "confiável em ambiente serverless (cada invocação pode cair numa instância "
         "diferente). Configure REDIS_URL (ex.: Upstash) antes de ir para produção."
     )
+
+# Cache da resposta da ReceitaWS (mesmo Redis do rate limit). A API gratuita
+# só permite ~3 consultas/minuto, e a exportação (PDF/XLSX) precisa dos mesmos
+# dados que acabaram de ser consultados - sem o cache, consultar + exportar já
+# queimava 2 das 3. Sem REDIS_URL o cache fica desligado e tudo vai direto na API.
+CACHE_RECEITA_TTL_SEGUNDOS = 15 * 60
+redis_cache = (
+    redis.Redis.from_url(REDIS_URL, socket_timeout=2, socket_connect_timeout=2, decode_responses=True)
+    if REDIS_URL
+    else None
+)
+
+
+def _ler_cache_receita(cnpj: str):
+    if not redis_cache:
+        return None
+    try:
+        bruto = redis_cache.get(f"receitaws:{cnpj}")
+        return json.loads(bruto) if bruto else None
+    except Exception:
+        # Redis fora do ar não pode derrubar a consulta - só perde o cache.
+        app.logger.warning("Falha ao ler o cache da ReceitaWS", exc_info=True)
+        return None
+
+
+def _gravar_cache_receita(cnpj: str, data: dict) -> None:
+    if not redis_cache:
+        return
+    try:
+        redis_cache.set(f"receitaws:{cnpj}", json.dumps(data), ex=CACHE_RECEITA_TTL_SEGUNDOS)
+    except Exception:
+        app.logger.warning("Falha ao gravar o cache da ReceitaWS", exc_info=True)
+
 
 # CAPTCHA (Cloudflare Turnstile, widget invisível) no login. A site key é
 # pública (vai pro HTML); a secret key só existe no servidor e valida o token
@@ -470,103 +504,114 @@ def trocar_senha():
     return redirect(destino)
 
 
+def _consultar_receitaws(cnpj: str):
+    """Chama a API da ReceitaWS. Retorna (data, erro) - "data" só vem
+    preenchido quando a resposta é válida (status OK)."""
+    url = f"https://www.receitaws.com.br/v1/cnpj/{cnpj}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    response = requests.get(url, headers=headers, timeout=10)
+
+    if response.status_code == 429 or "too many requests" in response.text.lower():
+        app.logger.warning(f"Limite atingido: {response.text}")
+        return None, "Limite de consultas excedido temporariamente. Aguarde um pouco e tente novamente."
+    if "application/json" not in response.headers.get("Content-Type", ""):
+        app.logger.error(f"Status: {response.status_code}, Conteúdo: {response.text}")
+        return None, "Resposta da API não está em formato JSON."
+
+    try:
+        data = response.json()
+    except (ValueError, json.JSONDecodeError):
+        app.logger.exception("Erro ao decodificar resposta da ReceitaWS")
+        return None, "Não foi possível interpretar a resposta da ReceitaWS."
+
+    if data.get("status") != "OK":
+        app.logger.warning(f"Resposta inválida: {data}")
+        return None, data.get("message", "Erro desconhecido ao consultar a API da ReceitaWS.")
+
+    return data, None
+
+
 def buscar_dados_empresa(cnpj: str):
-    """Busca os dados de um CNPJ na ReceitaWS + tributação/Lei do Bem no
-    Postgres. Usada tanto pela consulta principal (index) quanto pelas
-    exportações (PDF/XLSX), pra não duplicar essa lógica.
+    """Busca os dados de um CNPJ na ReceitaWS (com cache no Redis) +
+    tributação/Lei do Bem no Postgres. Usada tanto pela consulta principal
+    (index) quanto pelas exportações (PDF/XLSX), pra não duplicar essa lógica.
 
     Retorna (resultado, erro, msg_tp_tributacao, msg_lei_do_bem) - "resultado"
     vem None se "erro" estiver preenchido.
     """
-    url = f"https://www.receitaws.com.br/v1/cnpj/{cnpj}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-
     resultado = None
     erro = None
     msg_tp_tributacao = None
     msg_lei_do_bem = None
 
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-
-        if response.status_code == 429 or "too many requests" in response.text.lower():
-            erro = "Limite de consultas excedido temporariamente. Aguarde um pouco e tente novamente."
-            app.logger.warning(f"Limite atingido: {response.text}")
-        elif "application/json" not in response.headers.get("Content-Type", ""):
-            erro = "Resposta da API não está em formato JSON."
-            app.logger.error(f"Status: {response.status_code}, Conteúdo: {response.text}")
-        else:
-            try:
-                data = response.json()
-            except (ValueError, json.JSONDecodeError):
-                app.logger.exception("Erro ao decodificar resposta da ReceitaWS")
-                erro = "Não foi possível interpretar a resposta da ReceitaWS."
-                data = None
-
+        data = _ler_cache_receita(cnpj)
+        if data is None:
+            data, erro = _consultar_receitaws(cnpj)
             if data is not None:
-                if data.get("status") != "OK":
-                    erro = data.get("message", "Erro desconhecido ao consultar a API da ReceitaWS.")
-                    app.logger.warning(f"Resposta inválida: {data}")
-                else:
-                    resultado = data
+                _gravar_cache_receita(cnpj, data)
 
-                    # Busca separada dos dados de referência (tributação/Lei do
-                    # Bem): se o Postgres falhar aqui, os dados da Receita já
-                    # obtidos continuam sendo exibidos normalmente - só esses
-                    # dois campos caem num aviso, em vez de renderizar "None"
-                    # ou derrubar a consulta inteira.
-                    msg_tp_tributacao = "Não foi possível verificar a tributação."
-                    msg_lei_do_bem = "Não foi possível verificar a Lei do Bem."
-                    conn_ref = None
-                    try:
-                        conn_ref = get_conn()
-                        cursor_ref = conn_ref.cursor()
+        if data is not None:
+            resultado = data
 
-                        cursor_ref.execute(
-                            """
-                            SELECT string_agg(
-                                CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.tipo_tributacao,
-                                ' | '
-                            )
-                            FROM cnpj_tipo_tributacao c
-                            WHERE c.cnpj = %s
-                            """,
-                            (data.get("cnpj"),),
-                        )
-                        linha = cursor_ref.fetchone()
-                        msg_tp_tributacao = linha[0] if linha and linha[0] else "Tributação não identificada"
+            # Busca separada dos dados de referência (tributação/Lei do
+            # Bem): se o Postgres falhar aqui, os dados da Receita já
+            # obtidos continuam sendo exibidos normalmente - só esses
+            # dois campos caem num aviso, em vez de renderizar "None"
+            # ou derrubar a consulta inteira.
+            msg_tp_tributacao = "Não foi possível verificar a tributação."
+            msg_lei_do_bem = "Não foi possível verificar a Lei do Bem."
+            conn_ref = None
+            try:
+                conn_ref = get_conn()
+                cursor_ref = conn_ref.cursor()
 
-                        cursor_ref.execute(
-                            """
-                            SELECT string_agg(
-                                CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.uf,
-                                ' | '
-                            )
-                            FROM cnpj_lei_do_bem c
-                            WHERE c.cnpj = %s
-                            """,
-                            (data.get("cnpj"),),
-                        )
-                        linha_lei_do_bem = cursor_ref.fetchone()
-                        msg_lei_do_bem = (
-                            linha_lei_do_bem[0] if linha_lei_do_bem and linha_lei_do_bem[0] else "Lei do Bem não identificada"
-                        )
+                cursor_ref.execute(
+                    """
+                    SELECT string_agg(
+                        CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.tipo_tributacao,
+                        ' | '
+                    )
+                    FROM cnpj_tipo_tributacao c
+                    WHERE c.cnpj = %s
+                    """,
+                    (data.get("cnpj"),),
+                )
+                linha = cursor_ref.fetchone()
+                msg_tp_tributacao = linha[0] if linha and linha[0] else "Tributação não identificada"
 
-                        cursor_ref.close()
-                    except Exception:
-                        app.logger.exception("Erro ao buscar tributação/Lei do Bem")
-                    finally:
-                        if conn_ref:
-                            conn_ref.close()
+                cursor_ref.execute(
+                    """
+                    SELECT string_agg(
+                        CASE WHEN c.ano IS NULL THEN '' ELSE c.ano || ' - ' END || c.uf,
+                        ' | '
+                    )
+                    FROM cnpj_lei_do_bem c
+                    WHERE c.cnpj = %s
+                    """,
+                    (data.get("cnpj"),),
+                )
+                linha_lei_do_bem = cursor_ref.fetchone()
+                msg_lei_do_bem = (
+                    linha_lei_do_bem[0] if linha_lei_do_bem and linha_lei_do_bem[0] else "Lei do Bem não identificada"
+                )
 
-                    if "simples" in resultado:
-                        data_str = resultado["simples"].get("ultima_atualizacao", "").replace("Z", "")
-                        try:
-                            resultado["simples"]["ultima_atualizacao_formatada"] = datetime.fromisoformat(
-                                data_str
-                            ).strftime("%d/%m/%Y %H:%M")
-                        except ValueError:
-                            resultado["simples"]["ultima_atualizacao_formatada"] = data_str
+                cursor_ref.close()
+            except Exception:
+                app.logger.exception("Erro ao buscar tributação/Lei do Bem")
+            finally:
+                if conn_ref:
+                    conn_ref.close()
+
+            if "simples" in resultado:
+                data_str = resultado["simples"].get("ultima_atualizacao", "").replace("Z", "")
+                try:
+                    resultado["simples"]["ultima_atualizacao_formatada"] = datetime.fromisoformat(
+                        data_str
+                    ).strftime("%d/%m/%Y %H:%M")
+                except ValueError:
+                    resultado["simples"]["ultima_atualizacao_formatada"] = data_str
 
     except requests.exceptions.RequestException:
         app.logger.exception("Erro de conexão com a ReceitaWS")
@@ -647,8 +692,10 @@ def consulta_inpi_nome(nome):
 def _preparar_exportacao():
     """Lê CNPJ + status do INPI (já resolvido no navegador, de forma
     assíncrona) do form da exportação, e busca de novo os dados da
-    ReceitaWS/tributação/Lei do Bem - são rápidos, então não vale a pena
-    serializar o resultado inteiro num campo hidden. O INPI é lento (é
+    ReceitaWS/tributação/Lei do Bem - a ReceitaWS vem do cache no Redis
+    (preenchido pela consulta), então não gasta cota da API; e não serializa
+    o resultado num campo hidden pra não aceitar dados adulterados do
+    navegador no relatório. O INPI é lento (é
     scraping) e por isso reaproveita o que o frontend já resolveu, em vez
     de consultar de novo.
 
