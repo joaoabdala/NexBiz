@@ -9,7 +9,7 @@
 
     Funcionalidades Flask mantidas:
       - Consultar CNPJ (POST acao=consultar)
-      - Consulta INPI assíncrona (fetch /consulta-inpi/ e /consulta-inpi-nome/)
+      - Consulta INPI assíncrona (fetch /consulta-inpi/ e /consulta-inpi-nome?nome=)
       - Timeout de sessão por inatividade (30 minutos)
       - Mapa Google Maps embed
 
@@ -634,7 +634,7 @@
          Executada apenas quando há resultado da Receita na página.
          Dois fetch paralelos:
            1. /consulta-inpi/<cnpj>        → busca por CNPJ
-           2. /consulta-inpi-nome/<nome>   → busca por nome/fantasia
+           2. /consulta-inpi-nome?nome=... → busca por nome/fantasia
          Os elementos #inpi-resultado e #inpi-nome-resultado são
          atualizados com o retorno ou mensagem de erro.
          ───────────────────────────────────────────────────────── -->
