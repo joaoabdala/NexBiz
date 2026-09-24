@@ -370,10 +370,27 @@
                     >
                 </div>
 
+                <!-- CAPTCHA (Cloudflare Turnstile, invisível): roda em segundo
+                     plano e injeta o token no campo oculto "cf-turnstile-response"
+                     deste form. O botão só libera depois que o token chega. -->
+                <div
+                    class="cf-turnstile"
+                    data-sitekey="{{ turnstile_site_key }}"
+                    data-language="pt-br"
+                    data-callback="captchaOk"
+                    data-expired-callback="captchaExpirado"
+                    data-error-callback="captchaErro"
+                ></div>
+
+                <div id="msg-captcha" class="msg-base msg-erro" role="alert" hidden>
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    Não foi possível verificar seu navegador. Recarregue a página e tente novamente.
+                </div>
+
                 <!-- Botão de submit -->
-                <button type="submit" class="btn-giro w-100">
+                <button type="submit" id="btn-entrar" class="btn-giro w-100" disabled>
                     <span class="btn-giro-superficie">
-                        Entrar
+                        <span id="btn-entrar-texto">Verificando...</span>
                         <svg class="btn-giro-seta" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M5 12h14" />
                             <path d="m12 5 7 7-7 7" />
@@ -435,6 +452,32 @@
 
     <!-- Bootstrap JS - necessário para o Tooltip do campo Usuário -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        /* ─────────────────────────────────────────────────────────
+           CAPTCHA (Cloudflare Turnstile)
+           ─────────────────────────────────────────────────────────
+           Callbacks chamados pelo widget. Precisam ser globais e
+           existir antes do api.js carregar (por isso vêm antes dele).
+           ───────────────────────────────────────────────────────── */
+        function liberarEntrar(liberado) {
+            document.getElementById('btn-entrar').disabled = !liberado;
+            document.getElementById('btn-entrar-texto').textContent = liberado ? 'Entrar' : 'Verificando...';
+        }
+        function captchaOk() {
+            document.getElementById('msg-captcha').hidden = true;
+            liberarEntrar(true);
+        }
+        function captchaExpirado() {
+            // O widget renova o token sozinho; só trava o botão até chegar outro.
+            liberarEntrar(false);
+        }
+        function captchaErro() {
+            liberarEntrar(false);
+            document.getElementById('msg-captcha').hidden = false;
+        }
+    </script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
     <script>
         /* ─────────────────────────────────────────────────────────

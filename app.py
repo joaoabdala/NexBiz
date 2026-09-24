@@ -86,6 +86,51 @@ if not REDIS_URL:
         "diferente). Configure REDIS_URL (ex.: Upstash) antes de ir para produção."
     )
 
+# CAPTCHA (Cloudflare Turnstile, widget invisível) no login. A site key é
+# pública (vai pro HTML); a secret key só existe no servidor e valida o token
+# no /siteverify. Sem as duas configuradas, em dev usa as chaves de teste do
+# Cloudflare (sempre passam); na Vercel recusa subir, igual a SECRET_KEY.
+TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY")
+TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY")
+if not (TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY):
+    if os.getenv("VERCEL"):
+        raise RuntimeError(
+            "TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY não configuradas. Defina "
+            "essas variáveis de ambiente no painel da Vercel antes do deploy."
+        )
+    TURNSTILE_SITE_KEY = "1x00000000000000000000BB"  # teste: invisível, sempre passa
+    TURNSTILE_SECRET_KEY = "1x0000000000000000000000000000000AA"  # teste: sempre passa
+    logging.warning(
+        "TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY não configuradas - usando as "
+        "chaves de teste do Cloudflare (o CAPTCHA do login sempre passa)."
+    )
+
+
+def captcha_valido(token: str) -> bool:
+    """Valida o token do Turnstile no Cloudflare. O token é de uso único e
+    cada POST do login recarrega a página, então o widget sempre gera outro.
+    Qualquer falha (token vazio, rede, timeout) conta como inválido."""
+    if not token:
+        return False
+    try:
+        resp = requests.post(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data={
+                "secret": TURNSTILE_SECRET_KEY,
+                "response": token,
+                "remoteip": get_remote_address(),
+            },
+            timeout=5,
+        )
+        resultado = resp.json()
+    except Exception:
+        app.logger.exception("Falha ao validar o CAPTCHA no Cloudflare")
+        return False
+    if not resultado.get("success"):
+        app.logger.warning(f"CAPTCHA recusado: {resultado.get('error-codes')}")
+        return False
+    return True
+
 
 @app.after_request
 def adicionar_headers_seguranca(response):
@@ -197,6 +242,12 @@ def login():
         email = request.form.get("email", "").strip().lower()
         senha = request.form.get("senha", "")
 
+        # CAPTCHA antes de tocar no banco - robô nem chega a testar a senha.
+        if not captcha_valido(request.form.get("cf-turnstile-response", "")):
+            app.logger.warning(f"Login bloqueado pelo CAPTCHA para e-mail '{email}'")
+            erro_login = "A verificação anti-robô falhou ou expirou. Tente novamente."
+            return render_template("login.html", erro=erro_login, turnstile_site_key=TURNSTILE_SITE_KEY)
+
         try:
             conn = get_conn()
             cursor = dict_cursor(conn)
@@ -247,7 +298,7 @@ def login():
             app.logger.exception("Erro ao processar login")
             erro_login = "Não foi possível concluir o login. Tente novamente em instantes."
 
-    return render_template("login.html", erro=erro_login)
+    return render_template("login.html", erro=erro_login, turnstile_site_key=TURNSTILE_SITE_KEY)
 
 
 @app.route("/logout")

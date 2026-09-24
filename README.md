@@ -41,9 +41,11 @@ Crie um `.env` na raiz com:
 DATABASE_URL=postgresql://usuario:senha@host/banco?sslmode=require
 SECRET_KEY=<gerado com: python -c "import secrets; print(secrets.token_hex(32))">
 REDIS_URL=<URL de conexão do banco criado no Upstash>
+TURNSTILE_SITE_KEY=<site key do widget Turnstile no Cloudflare>
+TURNSTILE_SECRET_KEY=<secret key do mesmo widget>
 ```
 
-Use o endpoint **pooled** do Neon em `DATABASE_URL` (recomendado para ambientes serverless). `REDIS_URL` é usado pelo rate limit do login (`Flask-Limiter`); sem ela a aplicação ainda funciona (cai para armazenamento em memória), mas isso não é confiável em produção na Vercel - ver seção Segurança.
+Use o endpoint **pooled** do Neon em `DATABASE_URL` (recomendado para ambientes serverless). `REDIS_URL` é usado pelo rate limit do login (`Flask-Limiter`); sem ela a aplicação ainda funciona (cai para armazenamento em memória), mas isso não é confiável em produção na Vercel - ver seção Segurança. `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` são do CAPTCHA do login (Cloudflare Turnstile, widget em modo Invisible); sem elas, em dev o app usa as chaves de teste do Cloudflare (que sempre passam).
 
 Instale as dependências:
 
@@ -77,7 +79,7 @@ Acessa em `http://localhost:5000`.
 
 ## Deploy na Vercel
 
-O deploy usa `api/index.py` (que importa o `app` do `app.py`) e as rotas definidas em `vercel.json`. Configure `DATABASE_URL`, `SECRET_KEY` e `REDIS_URL` como variáveis de ambiente no painel da Vercel (nunca commitadas no repositório). Sem `SECRET_KEY` configurada, a aplicação recusa subir na Vercel (falha rápido em vez de rodar com uma chave instável entre invocações).
+O deploy usa `api/index.py` (que importa o `app` do `app.py`) e as rotas definidas em `vercel.json`. Configure `DATABASE_URL`, `SECRET_KEY`, `REDIS_URL`, `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` como variáveis de ambiente no painel da Vercel (nunca commitadas no repositório). Sem `SECRET_KEY` ou sem as chaves do Turnstile configuradas, a aplicação recusa subir na Vercel (falha rápido em vez de rodar com uma chave instável entre invocações).
 
 ## Migração de dados de referência (regime tributário / Lei do Bem)
 
@@ -102,6 +104,7 @@ Todo usuário pertence a um tenant (empresa). Não é permitido desativar, exclu
 - Senhas com hash (`werkzeug.security`), nunca em texto puro.
 - CSRF (`Flask-WTF`) em todos os formulários POST.
 - Rate limiting no login (`Flask-Limiter`) com backend Redis (Upstash, via `REDIS_URL`) - necessário porque o armazenamento em memória padrão não é compartilhado entre invocações serverless.
+- CAPTCHA invisível (Cloudflare Turnstile) no login, validado no servidor (`/siteverify`) antes de consultar o banco.
 - Headers `X-Frame-Options`, `X-Content-Type-Options` e `Referrer-Policy` em todas as respostas.
 - Erros internos (banco, APIs externas) são logados no servidor e nunca expostos ao usuário.
 - Trilha de auditoria (`audit_log`) para ações administrativas.

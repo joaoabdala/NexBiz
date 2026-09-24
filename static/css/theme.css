@@ -650,6 +650,30 @@ h1, h2, h3, h4, h5, h6 {
     transform: translateX(3px);
 }
 
+/* Desabilitado (ex.: login esperando o CAPTCHA) - sem efeitos de hover */
+.btn-giro:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-giro:disabled::before {
+    opacity: 0;
+}
+
+.btn-giro:disabled::after {
+    opacity: 1;
+}
+
+.btn-giro:disabled .btn-giro-superficie {
+    color: var(--cor-texto-primario);
+}
+
+.btn-giro:disabled .btn-giro-seta {
+    transform: none;
+}
+
 
 /* ─────────────────────────────────────────────────────────────
    7. MENSAGENS (alertas de erro, aviso e sucesso)
