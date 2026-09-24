@@ -186,13 +186,15 @@ def expor_nonce_csp():
 def montar_csp(nonce: str) -> str:
     diretivas = {
         "default-src": "'self'",
-        "script-src": f"'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
+        # static.cloudflareinsights.com: beacon do Cloudflare Web Analytics, que a
+        # própria Cloudflare injeta no HTML (sem nonce) e reporta pra cloudflareinsights.com.
+        "script-src": f"'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://challenges.cloudflare.com https://static.cloudflareinsights.com",
         # 'unsafe-inline' em estilo: os templates usam <style> e style="" inline;
         # o risco de CSS injetado é bem menor que o de script.
         "style-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
         "font-src": "'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
         "img-src": "'self' data:",
-        "connect-src": "'self'",
+        "connect-src": "'self' https://cloudflareinsights.com",
         "frame-src": "https://challenges.cloudflare.com https://maps.google.com https://www.google.com",
         "object-src": "'none'",
         "base-uri": "'self'",
