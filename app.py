@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import logging
 import os
@@ -9,9 +10,8 @@ from zoneinfo import ZoneInfo
 import psycopg2
 import requests
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from flask_wtf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -72,10 +72,49 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
 
 csrf = CSRFProtect(app)
 
+# Faixas de IP da Cloudflare (https://www.cloudflare.com/ips/). Só confiamos
+# no CF-Connecting-IP quando a conexão chegou de uma delas - senão qualquer um
+# poderia bater direto na Vercel (sem passar pela Cloudflare) e forjar o header
+# pra escapar do rate limit.
+CLOUDFLARE_IP_RANGES = [
+    ipaddress.ip_network(faixa)
+    for faixa in (
+        "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+        "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+        "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+        "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+        "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+        "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+    )
+]
+
+
+def _ip_valido(valor):
+    try:
+        return ipaddress.ip_address((valor or "").strip())
+    except ValueError:
+        return None
+
+
+def ip_do_cliente() -> str:
+    """IP real de quem fez a requisição, usado no rate limit, no Turnstile e
+    nos logs. Na Vercel o X-Real-IP é preenchido por ela (não dá pra forjar) e
+    é o IP de quem conectou - que, vindo pela Cloudflare, é um IP da Cloudflare;
+    aí o cliente de verdade está no CF-Connecting-IP. Fora da Vercel (dev
+    local) usa só o endereço da conexão."""
+    ip_conexao = (request.headers.get("X-Real-IP") if os.getenv("VERCEL") else None) or request.remote_addr or ""
+    conexao = _ip_valido(ip_conexao)
+    if conexao and any(conexao in faixa for faixa in CLOUDFLARE_IP_RANGES):
+        cliente = _ip_valido(request.headers.get("CF-Connecting-IP"))
+        if cliente:
+            return str(cliente)
+    return ip_conexao.strip() or "desconhecido"
+
+
 REDIS_URL = os.getenv("REDIS_URL")
 limiter = Limiter(
     app=app,
-    key_func=get_remote_address,
+    key_func=ip_do_cliente,
     default_limits=[],
     storage_uri=REDIS_URL,  # None = volta pro armazenamento em memória (só serve p/ dev local)
 )
@@ -118,7 +157,7 @@ def captcha_valido(token: str) -> bool:
             data={
                 "secret": TURNSTILE_SECRET_KEY,
                 "response": token,
-                "remoteip": get_remote_address(),
+                "remoteip": ip_do_cliente(),
             },
             timeout=5,
         )
@@ -132,12 +171,75 @@ def captcha_valido(token: str) -> bool:
     return True
 
 
+@app.before_request
+def gerar_nonce_csp():
+    # Nonce novo a cada resposta: só os <script> que o carregam (os nossos)
+    # são executados pela CSP; um script injetado não tem como adivinhá-lo.
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+
+@app.context_processor
+def expor_nonce_csp():
+    return {"csp_nonce": g.get("csp_nonce", "")}
+
+
+def montar_csp(nonce: str) -> str:
+    diretivas = {
+        "default-src": "'self'",
+        "script-src": f"'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
+        # 'unsafe-inline' em estilo: os templates usam <style> e style="" inline;
+        # o risco de CSS injetado é bem menor que o de script.
+        "style-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
+        "font-src": "'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
+        "img-src": "'self' data:",
+        "connect-src": "'self'",
+        "frame-src": "https://challenges.cloudflare.com https://maps.google.com https://www.google.com",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'",
+        "frame-ancestors": "'none'",
+        "report-uri": "/csp-report",
+    }
+    return "; ".join(f"{nome} {valor}" for nome, valor in diretivas.items())
+
+
 @app.after_request
 def adicionar_headers_seguranca(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    # Report-Only por enquanto: o navegador só avisa (via /csp-report) o que
+    # bloquearia. Depois de um tempo sem violações legítimas nos logs, trocar
+    # o nome do header para "Content-Security-Policy".
+    response.headers["Content-Security-Policy-Report-Only"] = montar_csp(g.get("csp_nonce", ""))
     return response
+
+
+@app.route("/csp-report", methods=["POST"])
+@csrf.exempt
+@limiter.limit("30 per minute")
+def csp_report():
+    relatorio = (request.get_json(force=True, silent=True) or {}).get("csp-report", {})
+    app.logger.warning(
+        "Violação de CSP: diretiva=%s bloqueado=%s página=%s",
+        relatorio.get("violated-directive"),
+        relatorio.get("blocked-uri"),
+        relatorio.get("document-uri"),
+    )
+    return "", 204
+
+
+@app.errorhandler(429)
+def muitas_requisicoes(erro):
+    # Só o login tem rate limit voltado ao usuário; o resto recebe só o status.
+    if request.endpoint == "login":
+        return render_template(
+            "login.html",
+            erro="Muitas tentativas de login. Aguarde alguns minutos e tente novamente.",
+            turnstile_site_key=TURNSTILE_SITE_KEY,
+        ), 429
+    return "Muitas requisições. Tente novamente em instantes.", 429
 
 
 TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
@@ -234,17 +336,29 @@ def admin_required(view):
     return wrapped
 
 
+def email_do_formulario() -> str:
+    return request.form.get("email", "").strip().lower()
+
+
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
+# Por e-mail, pega ataque distribuído em vários IPs contra a mesma conta.
+# Só conta tentativa que não logou (sucesso = redirect 302).
+@limiter.limit(
+    "5 per 15 minutes",
+    key_func=lambda: "login-email:" + email_do_formulario(),
+    methods=["POST"],
+    deduct_when=lambda response: response.status_code != 302,
+)
 def login():
     erro_login = None
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
+        email = email_do_formulario()
         senha = request.form.get("senha", "")
 
         # CAPTCHA antes de tocar no banco - robô nem chega a testar a senha.
         if not captcha_valido(request.form.get("cf-turnstile-response", "")):
-            app.logger.warning(f"Login bloqueado pelo CAPTCHA para e-mail '{email}'")
+            app.logger.warning(f"Login bloqueado pelo CAPTCHA para e-mail '{email}' (ip {ip_do_cliente()})")
             erro_login = "A verificação anti-robô falhou ou expirou. Tente novamente."
             return render_template("login.html", erro=erro_login, turnstile_site_key=TURNSTILE_SITE_KEY)
 
@@ -292,7 +406,7 @@ def login():
                 app.logger.info(f"Usuário '{user['email']}' logou com sucesso")
                 return redirect(url_for("index"))
             else:
-                app.logger.warning(f"Falha no login para e-mail '{email}'")
+                app.logger.warning(f"Falha no login para e-mail '{email}' (ip {ip_do_cliente()})")
                 erro_login = "Usuário ou senha inválidos."
         except Exception:
             app.logger.exception("Erro ao processar login")
