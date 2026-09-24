@@ -126,11 +126,14 @@ if not REDIS_URL:
         "diferente). Configure REDIS_URL (ex.: Upstash) antes de ir para produção."
     )
 
-# Cache da resposta da ReceitaWS (mesmo Redis do rate limit). A API gratuita
-# só permite ~3 consultas/minuto, e a exportação (PDF/XLSX) precisa dos mesmos
-# dados que acabaram de ser consultados - sem o cache, consultar + exportar já
-# queimava 2 das 3. Sem REDIS_URL o cache fica desligado e tudo vai direto na API.
-CACHE_RECEITA_TTL_SEGUNDOS = 15 * 60
+# Cache no Redis (o mesmo do rate limit) das consultas externas:
+# - ReceitaWS: a API gratuita só permite ~3 consultas/minuto, e a exportação
+#   (PDF/XLSX) precisa dos mesmos dados que acabaram de ser consultados.
+# - INPI: é scraping, lento, e repetir a consulta de um CNPJ/marca refaz tudo.
+# Dados cadastrais e registro de marca mudam pouco, então 24h é seguro. Só
+# respostas válidas entram no cache (erros nunca). Sem REDIS_URL o cache fica
+# desligado e tudo vai direto nas fontes.
+CACHE_TTL_SEGUNDOS = 24 * 60 * 60
 redis_cache = (
     redis.Redis.from_url(REDIS_URL, socket_timeout=2, socket_connect_timeout=2, decode_responses=True)
     if REDIS_URL
@@ -138,25 +141,25 @@ redis_cache = (
 )
 
 
-def _ler_cache_receita(cnpj: str):
+def _ler_cache(chave: str):
     if not redis_cache:
         return None
     try:
-        bruto = redis_cache.get(f"receitaws:{cnpj}")
+        bruto = redis_cache.get(chave)
         return json.loads(bruto) if bruto else None
     except Exception:
         # Redis fora do ar não pode derrubar a consulta - só perde o cache.
-        app.logger.warning("Falha ao ler o cache da ReceitaWS", exc_info=True)
+        app.logger.warning("Falha ao ler o cache '%s'", chave, exc_info=True)
         return None
 
 
-def _gravar_cache_receita(cnpj: str, data: dict) -> None:
+def _gravar_cache(chave: str, valor) -> None:
     if not redis_cache:
         return
     try:
-        redis_cache.set(f"receitaws:{cnpj}", json.dumps(data), ex=CACHE_RECEITA_TTL_SEGUNDOS)
+        redis_cache.set(chave, json.dumps(valor), ex=CACHE_TTL_SEGUNDOS)
     except Exception:
-        app.logger.warning("Falha ao gravar o cache da ReceitaWS", exc_info=True)
+        app.logger.warning("Falha ao gravar o cache '%s'", chave, exc_info=True)
 
 
 # CAPTCHA (Cloudflare Turnstile, widget invisível) no login. A site key é
@@ -546,11 +549,12 @@ def buscar_dados_empresa(cnpj: str):
     msg_lei_do_bem = None
 
     try:
-        data = _ler_cache_receita(cnpj)
+        chave_cache = f"receitaws:{cnpj}"
+        data = _ler_cache(chave_cache)
         if data is None:
             data, erro = _consultar_receitaws(cnpj)
             if data is not None:
-                _gravar_cache_receita(cnpj, data)
+                _gravar_cache(chave_cache, data)
 
         if data is not None:
             resultado = data
@@ -665,8 +669,14 @@ def index():
 def consulta_inpi(cnpj):
     """Rota chamada de forma assíncrona pelo frontend. Retorna JSON com o
     resultado da consulta no INPI por CNPJ."""
+    chave_cache = "inpi:cnpj:" + "".join(c for c in cnpj if c.isdigit())
+    encontrou = _ler_cache(chave_cache)
+    if encontrou is not None:
+        return {"possui_marca": encontrou}
+
     try:
         encontrou = possui_marca_no_inpi(cnpj)
+        _gravar_cache(chave_cache, encontrou)
         return {"possui_marca": encontrou}
     except Exception as e:
         logging.warning(f"Falha na consulta INPI para CNPJ {cnpj}: {e}")
@@ -681,8 +691,16 @@ def consulta_inpi_nome(nome):
     if len(nome) > 200:
         return {"erro": "Nome muito longo."}, 400
 
+    # Normaliza espaços/maiúsculas na chave pra "Empresa  X" e "empresa x"
+    # reaproveitarem o mesmo resultado.
+    chave_cache = "inpi:nome:" + " ".join(nome.split()).lower()
+    encontrou = _ler_cache(chave_cache)
+    if encontrou is not None:
+        return {"possui_marca": encontrou}
+
     try:
         encontrou = possui_marca_por_nome(nome)
+        _gravar_cache(chave_cache, encontrou)
         return {"possui_marca": encontrou}
     except Exception as e:
         logging.warning(f"Falha na consulta INPI por nome '{nome}': {e}")

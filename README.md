@@ -45,7 +45,7 @@ TURNSTILE_SITE_KEY=<site key do widget Turnstile no Cloudflare>
 TURNSTILE_SECRET_KEY=<secret key do mesmo widget>
 ```
 
-Use o endpoint **pooled** do Neon em `DATABASE_URL` (recomendado para ambientes serverless). `REDIS_URL` é usado pelo rate limit do login (`Flask-Limiter`) e pelo cache de 15 min das respostas da ReceitaWS (a exportação PDF/XLSX reaproveita a consulta em vez de gastar cota da API); sem ela a aplicação ainda funciona (cai para armazenamento em memória), mas isso não é confiável em produção na Vercel - ver seção Segurança. `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` são do CAPTCHA do login (Cloudflare Turnstile, widget em modo Invisible); sem elas, em dev o app usa as chaves de teste do Cloudflare (que sempre passam).
+Use o endpoint **pooled** do Neon em `DATABASE_URL` (recomendado para ambientes serverless). `REDIS_URL` é usado pelo rate limit do login (`Flask-Limiter`) e pelo cache de 24h das consultas à ReceitaWS e ao INPI (a exportação PDF/XLSX e consultas repetidas reaproveitam o resultado em vez de gastar cota da API ou refazer o scraping); sem ela a aplicação ainda funciona (cai para armazenamento em memória), mas isso não é confiável em produção na Vercel - ver seção Segurança. `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` são do CAPTCHA do login (Cloudflare Turnstile, widget em modo Invisible); sem elas, em dev o app usa as chaves de teste do Cloudflare (que sempre passam).
 
 Instale as dependências:
 
