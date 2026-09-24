@@ -642,9 +642,11 @@
     <script nonce="{{ csp_nonce }}">
         (function () {
             var cnpj     = "{{ cnpj }}";
-            var fantasia = "{{ resultado.fantasia or '' }}".trim();
+            // tojson em vez de interpolar entre aspas: assim "&", aspas etc.
+            // chegam como texto puro, sem o escape de HTML ("&amp;") ir parar na busca.
+            var fantasia = ({{ (resultado.fantasia or '')|tojson }}).trim();
             // Usa fantasia se disponível; senão usa o nome da empresa
-            var nomeEncoded = encodeURIComponent(fantasia || "{{ resultado.nome }}");
+            var nomeEncoded = encodeURIComponent(fantasia || {{ (resultado.nome or '')|tojson }});
 
             // Reflete o status resolvido nos campos hidden dos forms de
             // exportação (XLSX/PDF), pra eles saírem com o mesmo resultado
@@ -681,7 +683,7 @@
             // ── 2. Consulta INPI por Nome ───────────────────────
             var elNome = document.getElementById('inpi-nome-resultado');
             if (elNome) {
-                fetch('/consulta-inpi-nome/' + nomeEncoded)
+                fetch('/consulta-inpi-nome?nome=' + nomeEncoded)
                     .then(function (res) { return res.json(); })
                     .then(function (data) {
                         if (data.erro) {

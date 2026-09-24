@@ -683,11 +683,19 @@ def consulta_inpi(cnpj):
         return {"erro": "Não foi possível consultar o INPI no momento."}, 200
 
 
-@app.route("/consulta-inpi-nome/<path:nome>")
+@app.route("/consulta-inpi-nome")
 @login_required
-def consulta_inpi_nome(nome):
+def consulta_inpi_nome():
     """Rota chamada de forma assíncrona pelo frontend. Retorna JSON com o
-    resultado da consulta no INPI por nome da marca."""
+    resultado da consulta no INPI por nome da marca.
+
+    O nome vem na query string (?nome=...), não no caminho da URL: na Vercel
+    o caminho chega ao Flask ainda codificado ("ARANHA%20FERREIRA"), e o INPI
+    acabava pesquisando o texto com "%20" - dando resultado errado. A query
+    string é sempre decodificada, em qualquer ambiente."""
+    nome = (request.args.get("nome") or "").strip()
+    if not nome:
+        return {"erro": "Nome não informado."}, 400
     if len(nome) > 200:
         return {"erro": "Nome muito longo."}, 400
 
