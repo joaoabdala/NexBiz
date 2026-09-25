@@ -271,13 +271,16 @@ def csp_report():
 
 @app.errorhandler(429)
 def muitas_requisicoes(erro):
-    # Só o login tem rate limit voltado ao usuário; o resto recebe só o status.
+    # Login e troca de senha têm rate limit voltado ao usuário; o resto recebe só o status.
     if request.endpoint == "login":
         return render_template(
             "login.html",
             erro="Muitas tentativas de login. Aguarde alguns minutos e tente novamente.",
             turnstile_site_key=TURNSTILE_SITE_KEY,
         ), 429
+    if request.endpoint == "trocar_senha":
+        flash("Muitas tentativas de troca de senha. Aguarde alguns minutos e tente novamente.", "error")
+        return redirect(destino_da_troca_de_senha())
     return "Muitas requisições. Tente novamente em instantes.", 429
 
 
@@ -462,18 +465,25 @@ def logout():
     return redirect(url_for("login"))
 
 
-@app.route("/conta/trocar-senha", methods=["POST"])
-@login_required
-def trocar_senha():
-    senha_atual = request.form.get("senha_atual") or ""
-    nova_senha = request.form.get("nova_senha") or ""
-
+def destino_da_troca_de_senha() -> str:
     # "proximo" volta o usuário pra página de onde veio (qualquer navbar).
     # Só aceita caminho relativo do próprio site - nunca um destino
     # controlado por quem envia o formulário (evita open redirect).
     destino = request.form.get("proximo") or url_for("index")
     if not destino.startswith("/") or destino.startswith("//"):
         destino = url_for("index")
+    return destino
+
+
+@app.route("/conta/trocar-senha", methods=["POST"])
+@login_required
+# Por usuário: quem pegar uma sessão aberta não consegue ficar chutando a
+# senha atual até acertar e tomar a conta.
+@limiter.limit("5 per 15 minutes", key_func=lambda: "trocar-senha:" + session.get("usuario", ""))
+def trocar_senha():
+    senha_atual = request.form.get("senha_atual") or ""
+    nova_senha = request.form.get("nova_senha") or ""
+    destino = destino_da_troca_de_senha()
 
     conn = None
     try:
