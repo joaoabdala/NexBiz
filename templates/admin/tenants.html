@@ -203,13 +203,17 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="acao" value="criar">
                     <div class="row g-3 align-items-end">
-                        <div class="col-12 col-md-5">
+                        <div class="col-12 col-md-4">
                             <label class="campo-label">Nome</label>
                             <input type="text" name="nome" class="form-control" required>
                         </div>
-                        <div class="col-12 col-md-5">
+                        <div class="col-12 col-md-4">
                             <label class="campo-label">Slug (identificador)</label>
                             <input type="text" name="slug" class="form-control" placeholder="ex: abdala-nexus" required>
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <label class="campo-label">Limite de usuários ativos</label>
+                            <input type="number" name="max_active_users" class="form-control" min="1" step="1" required>
                         </div>
                         <div class="col-12 col-md-2">
                             <button type="submit" class="btn-primario w-100">Criar</button>
@@ -229,6 +233,15 @@
                             <span class="texto-mono">{{ tenant.slug }}</span>
                             <span class="tag {{ 'tag-ativa' if tenant.active else 'tag-inativa' }}">
                                 {{ 'Ativo' if tenant.active else 'Inativo' }}
+                            </span>
+                            {% set acima_do_limite = tenant.max_active_users and tenant.ativos > tenant.max_active_users %}
+                            <span class="tag {{ 'tag-inativa' if acima_do_limite else 'tag-info' }}" title="Usuários ativos / limite (super-admins não contam)">
+                                <i class="bi bi-people me-1"></i>
+                                {% if tenant.max_active_users %}
+                                    {{ tenant.ativos }} / {{ tenant.max_active_users }}
+                                {% else %}
+                                    {{ tenant.ativos }} / sem limite
+                                {% endif %}
                             </span>
                         </div>
 
@@ -270,6 +283,10 @@
                                 <div>
                                     <label class="campo-label">Slug</label>
                                     <input type="text" name="slug" value="{{ tenant.slug }}" class="admin-input">
+                                </div>
+                                <div>
+                                    <label class="campo-label">Limite de ativos</label>
+                                    <input type="number" name="max_active_users" value="{{ tenant.max_active_users or '' }}" min="1" step="1" class="admin-input" required>
                                 </div>
                                 <button type="submit" class="btn-secundario btn-mini">Salvar</button>
                             </form>

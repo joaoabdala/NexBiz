@@ -1,3 +1,4 @@
+import hmac
 import ipaddress
 import json
 import logging
@@ -356,6 +357,42 @@ def tenant_e_ultimo_acesso_admin(cursor, tenant_id) -> bool:
     return len(cursor.fetchall()) == 0
 
 
+def tenant_tem_vaga(cursor, tenant_id):
+    """(tem_vaga, limite) - se cabe mais um usuário ativo no tenant. Gestores
+    contam no limite; super-admins não. NULL no limite = sem limite.
+
+    FOR UPDATE na linha do tenant serializa quem está criando/ativando
+    usuários nele - duas requisições ao mesmo tempo não passam as duas pela
+    última vaga."""
+    cursor.execute("SELECT max_active_users FROM tenants WHERE id = %s FOR UPDATE", (tenant_id,))
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return True, None
+    limite = row[0]
+    cursor.execute(
+        "SELECT count(*) FROM users WHERE tenant_id = %s AND active = true AND role <> 'admin'",
+        (tenant_id,),
+    )
+    return cursor.fetchone()[0] < limite, limite
+
+
+def alvo_no_escopo(cursor, user_id):
+    """Usuário alvo de uma ação da tela de admin (dict com role, tenant_id,
+    active, email), ou None se não existe ou está fora do alcance de quem
+    está logado: o gestor só alcança usuários comuns do próprio tenant. Trava
+    a linha até o fim da transação."""
+    if not str(user_id or "").isdigit():
+        return None
+    cursor.execute("SELECT role, tenant_id, active, email FROM users WHERE id = %s FOR UPDATE", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        return None
+    alvo = dict(zip(("role", "tenant_id", "active", "email"), row))
+    if session.get("perfil") == "gestor" and (alvo["role"] != "user" or alvo["tenant_id"] != session.get("tenant_id")):
+        return None
+    return alvo
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -367,6 +404,7 @@ def login_required(view):
 
 
 def admin_required(view):
+    """Só o super-admin (role 'admin') - telas globais: tenants e auditoria."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         if "usuario" not in session:
@@ -376,6 +414,101 @@ def admin_required(view):
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def gestao_usuarios_required(view):
+    """Super-admin ou gestor - a tela de usuários. O gestor só enxerga e
+    mexe no próprio tenant; esse escopo é aplicado dentro da rota."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if "usuario" not in session:
+            return redirect(url_for("login"))
+        if session.get("perfil") not in ("admin", "gestor"):
+            abort(403)
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+def contexto_perfil() -> dict:
+    """Flags de perfil que todos os templates com navbar usam."""
+    perfil = session.get("perfil")
+    return {
+        "is_super_admin": perfil == "admin",
+        "pode_gerenciar_usuarios": perfil in ("admin", "gestor"),
+    }
+
+
+# Motivos pelos quais uma sessão é derrubada - o código vai na querystring do
+# /login e a mensagem é resolvida aqui, nunca ecoada da URL.
+MOTIVOS_SESSAO_ENCERRADA = {
+    "outra_sessao": "Sua sessão foi encerrada porque sua conta foi acessada em outro dispositivo.",
+    "inativo": "Sua sessão foi encerrada porque seu acesso foi desativado.",
+    "expirada": "Sua sessão expirou. Entre novamente.",
+}
+
+# Endpoints que não passam pela verificação de sessão: os que servem pra
+# entrar/sair e os que não dependem de usuário.
+ENDPOINTS_SEM_VERIFICACAO_DE_SESSAO = {"static", "login", "logout", "csp_report"}
+ENDPOINTS_JSON = {"consulta_inpi", "consulta_inpi_nome"}
+
+
+@app.before_request
+def verificar_sessao():
+    """Sessão única + revalidação a cada requisição. O cookie guarda o token
+    gerado no último login; se no banco o token já é outro (login em outro
+    dispositivo), ou o usuário/tenant foi desativado, a sessão cai na hora.
+    Também relê role/tenant/nome - rebaixar ou mover alguém vale na próxima
+    requisição, não só quando o cookie expira."""
+    if request.endpoint in ENDPOINTS_SEM_VERIFICACAO_DE_SESSAO or "usuario" not in session:
+        return None
+
+    motivo = None
+    user_id = session.get("user_id")
+    token = session.get("sessao") or ""
+    if not user_id or not token:
+        motivo = "expirada"  # cookie de antes da sessão única
+    else:
+        conn = None
+        try:
+            conn = get_conn()
+            cursor = dict_cursor(conn)
+            cursor.execute(
+                """
+                SELECT u.name, u.role, u.active, u.session_token, u.tenant_id,
+                       t.name AS tenant_name, t.active AS tenant_active
+                FROM users u
+                JOIN tenants t ON t.id = u.tenant_id
+                WHERE u.id = %s
+                """,
+                (user_id,),
+            )
+            user = cursor.fetchone()
+            cursor.close()
+        except Exception:
+            # Sem conseguir validar, não deixa passar.
+            app.logger.exception("Erro ao validar a sessão")
+            abort(503)
+        finally:
+            if conn:
+                conn.close()
+
+        if not user or not user["active"] or not user["tenant_active"]:
+            motivo = "inativo"
+        elif not user["session_token"] or not hmac.compare_digest(user["session_token"], token):
+            motivo = "outra_sessao"
+        else:
+            session["perfil"] = user["role"]
+            session["tenant_id"] = user["tenant_id"]
+            session["tenant_nome"] = user["tenant_name"]
+            session["nome_exibicao"] = user["name"]
+            return None
+
+    app.logger.info(f"Sessão de '{session.get('usuario')}' encerrada (motivo: {motivo})")
+    session.clear()
+    if request.endpoint in ENDPOINTS_JSON:
+        return {"erro": "sessao_encerrada", "motivo": motivo}, 401
+    return redirect(url_for("login", motivo=motivo))
 
 
 def email_do_formulario() -> str:
@@ -394,6 +527,8 @@ def email_do_formulario() -> str:
 )
 def login():
     erro_login = None
+    if request.method == "GET":
+        erro_login = MOTIVOS_SESSAO_ENCERRADA.get(request.args.get("motivo", ""))
     if request.method == "POST":
         email = email_do_formulario()
         senha = request.form.get("senha", "")
@@ -422,28 +557,32 @@ def login():
             conn.close()
 
             if user and check_password_hash(user["password_hash"], senha):
+                # Sessão única: o token novo substitui o anterior no banco, e
+                # a outra sessão (se houver) cai na próxima requisição dela.
+                # Sem gravar o token a sessão nasceria inválida - então aqui
+                # uma falha derruba o login (cai no except abaixo).
+                token = secrets.token_urlsafe(32)
+                conn2 = get_conn()
+                try:
+                    cursor2 = conn2.cursor()
+                    cursor2.execute(
+                        "UPDATE users SET last_login_at = now(), session_token = %s WHERE id = %s",
+                        (token, user["id"]),
+                    )
+                    conn2.commit()
+                    cursor2.close()
+                finally:
+                    conn2.close()
+
                 session.clear()
                 session.permanent = True
+                session["user_id"] = user["id"]
+                session["sessao"] = token
                 session["usuario"] = user["email"]
                 session["nome_exibicao"] = user["name"]
                 session["perfil"] = user["role"]
                 session["tenant_id"] = user["tenant_id"]
                 session["tenant_nome"] = user["tenant_name"]
-
-                # Falha ao gravar o último login não pode derrubar um login
-                # que já foi validado - registra à parte, sem propagar erro.
-                try:
-                    conn2 = get_conn()
-                    cursor2 = conn2.cursor()
-                    cursor2.execute(
-                        "UPDATE users SET last_login_at = now() WHERE id = %s",
-                        (user["id"],),
-                    )
-                    conn2.commit()
-                    cursor2.close()
-                    conn2.close()
-                except Exception:
-                    app.logger.exception("Falha ao gravar last_login_at")
 
                 app.logger.info(f"Usuário '{user['email']}' logou com sucesso")
                 return redirect(url_for("index"))
@@ -460,6 +599,24 @@ def login():
 @app.route("/logout")
 def logout():
     nome = session.get("nome_exibicao", session.get("usuario", "desconhecido"))
+    # Invalida o token no banco - só se ainda for o desta sessão, pra um
+    # logout numa sessão já derrubada não derrubar a sessão nova.
+    if session.get("user_id") and session.get("sessao"):
+        conn = None
+        try:
+            conn = get_conn()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE users SET session_token = NULL WHERE id = %s AND session_token = %s",
+                (session["user_id"], session["sessao"]),
+            )
+            conn.commit()
+            cursor.close()
+        except Exception:
+            app.logger.exception("Falha ao invalidar a sessão no logout")
+        finally:
+            if conn:
+                conn.close()
     session.clear()
     app.logger.info(f"Usuário: '{nome}' Deslogou com sucesso")
     return redirect(url_for("login"))
@@ -497,11 +654,14 @@ def trocar_senha():
         elif len(nova_senha) < 8:
             flash("A nova senha precisa ter pelo menos 8 caracteres.", "error")
         else:
+            # Token novo: mantém esta sessão e derruba qualquer outra.
+            token = secrets.token_urlsafe(32)
             cursor.execute(
-                "UPDATE users SET password_hash = %s WHERE id = %s",
-                (generate_password_hash(nova_senha), user["id"]),
+                "UPDATE users SET password_hash = %s, session_token = %s WHERE id = %s",
+                (generate_password_hash(nova_senha), token, user["id"]),
             )
             conn.commit()
+            session["sessao"] = token
             registrar_auditoria("trocar_senha_propria", f"'{session['usuario']}'")
             flash("Senha atualizada com sucesso.", "success")
         cursor.close()
@@ -646,7 +806,6 @@ def index():
     msg_tp_tributacao = None
     msg_lei_do_bem = None
     nome_usuario = session["nome_exibicao"]
-    is_admin = session.get("perfil") == "admin"
 
     if request.method == "POST":
         acao = request.form.get("acao")
@@ -670,7 +829,7 @@ def index():
         msg_tp_tributacao=msg_tp_tributacao,
         msg_lei_do_bem=msg_lei_do_bem,
         nome_usuario=nome_usuario,
-        is_admin=is_admin,
+        **contexto_perfil(),
     )
 
 
@@ -796,6 +955,13 @@ def exportar_pdf():
 # ADMIN - CRUD de tenants e usuários
 # ─────────────────────────────────────────────────────────────
 
+def limite_do_formulario():
+    """Limite de usuários ativos digitado no form de tenant - inteiro >= 1,
+    ou None se vazio/inválido."""
+    valor = (request.form.get("max_active_users") or "").strip()
+    return int(valor) if valor.isdigit() and int(valor) > 0 else None
+
+
 @app.route("/admin/tenants", methods=["GET", "POST"])
 @admin_required
 def admin_tenants():
@@ -812,27 +978,49 @@ def admin_tenants():
             if acao == "criar":
                 nome = (request.form.get("nome") or "").strip()
                 slug = (request.form.get("slug") or "").strip().lower()
+                limite = limite_do_formulario()
                 if not nome or not slug:
                     erro = "Informe nome e identificador (slug) do tenant."
+                elif limite is None:
+                    erro = "Informe o limite de usuários ativos (número inteiro, 1 ou mais)."
                 else:
-                    cursor.execute("INSERT INTO tenants (name, slug) VALUES (%s, %s)", (nome, slug))
+                    cursor.execute(
+                        "INSERT INTO tenants (name, slug, max_active_users) VALUES (%s, %s, %s)",
+                        (nome, slug, limite),
+                    )
                     conn.commit()
-                    registrar_auditoria("criar_tenant", f"nome={nome} slug={slug}")
+                    registrar_auditoria("criar_tenant", f"nome={nome} slug={slug} limite={limite}")
                     mensagem = f"Tenant '{nome}' criado."
 
             elif acao == "editar":
                 tenant_id = request.form.get("tenant_id")
                 nome = (request.form.get("nome") or "").strip()
                 slug = (request.form.get("slug") or "").strip().lower()
+                limite = limite_do_formulario()
                 if not nome or not slug:
                     erro = "Informe nome e identificador (slug) do tenant."
+                elif limite is None:
+                    erro = "Informe o limite de usuários ativos (número inteiro, 1 ou mais)."
                 else:
                     cursor.execute(
-                        "UPDATE tenants SET name = %s, slug = %s WHERE id = %s", (nome, slug, tenant_id)
+                        "UPDATE tenants SET name = %s, slug = %s, max_active_users = %s WHERE id = %s",
+                        (nome, slug, limite, tenant_id),
                     )
+                    cursor.execute(
+                        "SELECT count(*) FROM users WHERE tenant_id = %s AND active = true AND role <> 'admin'",
+                        (tenant_id,),
+                    )
+                    (ativos,) = cursor.fetchone()
                     conn.commit()
-                    registrar_auditoria("editar_tenant", f"'{nome}' (slug={slug})")
+                    registrar_auditoria("editar_tenant", f"'{nome}' (slug={slug}, limite={limite})")
                     mensagem = "Tenant atualizado."
+                    # Baixar o limite abaixo do que já está ativo não desativa
+                    # ninguém - só trava novas ativações até a conta fechar.
+                    if ativos > limite:
+                        mensagem += (
+                            f" Atenção: o tenant tem {ativos} usuários ativos, acima do novo limite de {limite}."
+                            " Ninguém foi desativado, mas novas ativações ficam bloqueadas até ficar abaixo do limite."
+                        )
 
             elif acao == "alternar_status":
                 tenant_id = request.form.get("tenant_id")
@@ -878,7 +1066,15 @@ def admin_tenants():
     conn = get_conn()
     try:
         cursor = dict_cursor(conn)
-        cursor.execute("SELECT id, name, slug, active, created_at FROM tenants ORDER BY name")
+        cursor.execute(
+            """
+            SELECT t.id, t.name, t.slug, t.active, t.created_at, t.max_active_users,
+                   (SELECT count(*) FROM users u
+                    WHERE u.tenant_id = t.id AND u.active = true AND u.role <> 'admin') AS ativos
+            FROM tenants t
+            ORDER BY t.name
+            """
+        )
         tenants = cursor.fetchall()
         cursor.close()
     finally:
@@ -890,18 +1086,32 @@ def admin_tenants():
         erro=erro,
         mensagem=mensagem,
         nome_usuario=session["nome_exibicao"],
-        is_admin=True,
+        **contexto_perfil(),
     )
 
 
+ROLES_USUARIO = ("admin", "gestor", "user")
+
+
+def mensagem_limite_atingido(limite, eh_gestor: bool) -> str:
+    quem_aumenta = "peça ao administrador para aumentar o limite" if eh_gestor else "aumente o limite na aba Tenants"
+    return f"Limite de {limite} usuários ativos do tenant atingido. Inative alguém ou {quem_aumenta}."
+
+
 @app.route("/admin/usuarios", methods=["GET", "POST"])
-@admin_required
+@gestao_usuarios_required
 def admin_usuarios():
     erro = None
     mensagem = None
+    # Gestor: a tela inteira (listagem e ações) fica presa ao tenant dele, e
+    # ele só cria/edita usuários comuns. O escopo sai da sessão, nunca do form.
+    eh_gestor = session.get("perfil") == "gestor"
+    meu_tenant_id = session.get("tenant_id")
 
     if request.method == "POST":
         acao = request.form.get("acao")
+        if eh_gestor and acao == "excluir":
+            abort(403)
         conn = None
         try:
             conn = get_conn()
@@ -911,8 +1121,12 @@ def admin_usuarios():
                 nome = (request.form.get("nome") or "").strip()
                 email = (request.form.get("email") or "").strip().lower()
                 senha = request.form.get("senha") or ""
-                role = request.form.get("role") if request.form.get("role") in ("admin", "user") else "user"
-                tenant_id = request.form.get("tenant_id")
+                if eh_gestor:
+                    role = "user"
+                    tenant_id = meu_tenant_id
+                else:
+                    role = request.form.get("role") if request.form.get("role") in ROLES_USUARIO else "user"
+                    tenant_id = request.form.get("tenant_id")
 
                 if not nome or not email or not tenant_id:
                     erro = "Nome, e-mail e tenant são obrigatórios."
@@ -923,71 +1137,116 @@ def admin_usuarios():
                     tenant_row = cursor.fetchone()
                     nome_tenant = tenant_row[0] if tenant_row else f"id={tenant_id}"
 
-                    cursor.execute(
-                        "INSERT INTO users (tenant_id, name, email, password_hash, role) VALUES (%s, %s, %s, %s, %s)",
-                        (tenant_id, nome, email, generate_password_hash(senha), role),
-                    )
-                    conn.commit()
-                    registrar_auditoria("criar_usuario", f"'{email}' em '{nome_tenant}' (role={role})")
-                    mensagem = f"Usuário '{email}' criado."
+                    # Super-admin não conta no limite do tenant.
+                    tem_vaga, limite = (True, None) if role == "admin" else tenant_tem_vaga(cursor, tenant_id)
+                    if not tem_vaga:
+                        erro = mensagem_limite_atingido(limite, eh_gestor)
+                    else:
+                        cursor.execute(
+                            "INSERT INTO users (tenant_id, name, email, password_hash, role) VALUES (%s, %s, %s, %s, %s)",
+                            (tenant_id, nome, email, generate_password_hash(senha), role),
+                        )
+                        conn.commit()
+                        registrar_auditoria("criar_usuario", f"'{email}' em '{nome_tenant}' (role={role})")
+                        mensagem = f"Usuário '{email}' criado."
 
             elif acao == "editar":
                 user_id = request.form.get("user_id")
                 nome = (request.form.get("nome") or "").strip()
-                role = request.form.get("role") if request.form.get("role") in ("admin", "user") else "user"
-                tenant_id = request.form.get("tenant_id")
+                alvo = alvo_no_escopo(cursor, user_id)
 
-                cursor.execute("SELECT name, active FROM tenants WHERE id = %s", (tenant_id,))
-                tenant_row = cursor.fetchone()
-                nome_tenant = tenant_row[0] if tenant_row else f"id={tenant_id}"
-                tenant_novo_ativo = bool(tenant_row and tenant_row[1])
-
-                if (role != "admin" or not tenant_novo_ativo) and eh_unico_admin_ativo(cursor, user_id):
-                    erro = (
-                        "Não é possível remover a permissão de admin (ou movê-lo para um "
-                        "tenant inativo) sendo o único usuário admin ativo."
-                    )
-                else:
-                    cursor.execute(
-                        "UPDATE users SET name = %s, role = %s, tenant_id = %s WHERE id = %s RETURNING email",
-                        (nome, role, tenant_id, user_id),
-                    )
-                    (email_usuario,) = cursor.fetchone()
+                if not alvo:
+                    erro = "Usuário não encontrado."
+                elif not nome:
+                    erro = "Informe o nome do usuário."
+                elif eh_gestor:
+                    # Gestor só muda o nome - role e tenant ficam com o super-admin.
+                    cursor.execute("UPDATE users SET name = %s WHERE id = %s", (nome, user_id))
                     conn.commit()
-                    registrar_auditoria(
-                        "editar_usuario", f"'{email_usuario}' -> nome={nome}, tenant='{nome_tenant}', role={role}"
-                    )
+                    registrar_auditoria("editar_usuario", f"'{alvo['email']}' -> nome={nome}")
                     mensagem = "Usuário atualizado."
+                else:
+                    role = request.form.get("role") if request.form.get("role") in ROLES_USUARIO else "user"
+                    tenant_id = request.form.get("tenant_id")
+
+                    cursor.execute("SELECT name, active FROM tenants WHERE id = %s", (tenant_id,))
+                    tenant_row = cursor.fetchone()
+                    nome_tenant = tenant_row[0] if tenant_row else f"id={tenant_id}"
+                    tenant_novo_ativo = bool(tenant_row and tenant_row[1])
+
+                    # Passa a ocupar vaga quem está ativo e entra num tenant
+                    # novo ou deixa de ser super-admin.
+                    passa_a_contar = (
+                        alvo["active"]
+                        and role != "admin"
+                        and (alvo["role"] == "admin" or str(alvo["tenant_id"]) != str(tenant_id))
+                    )
+                    tem_vaga, limite = tenant_tem_vaga(cursor, tenant_id) if passa_a_contar else (True, None)
+
+                    if (role != "admin" or not tenant_novo_ativo) and eh_unico_admin_ativo(cursor, user_id):
+                        erro = (
+                            "Não é possível remover a permissão de admin (ou movê-lo para um "
+                            "tenant inativo) sendo o único usuário admin ativo."
+                        )
+                    elif not tem_vaga:
+                        erro = mensagem_limite_atingido(limite, eh_gestor)
+                    else:
+                        cursor.execute(
+                            "UPDATE users SET name = %s, role = %s, tenant_id = %s WHERE id = %s",
+                            (nome, role, tenant_id, user_id),
+                        )
+                        conn.commit()
+                        registrar_auditoria(
+                            "editar_usuario", f"'{alvo['email']}' -> nome={nome}, tenant='{nome_tenant}', role={role}"
+                        )
+                        mensagem = "Usuário atualizado."
 
             elif acao == "redefinir_senha":
                 user_id = request.form.get("user_id")
                 nova_senha = request.form.get("nova_senha") or ""
-                if len(nova_senha) < 8:
+                alvo = alvo_no_escopo(cursor, user_id)
+                if not alvo:
+                    erro = "Usuário não encontrado."
+                elif len(nova_senha) < 8:
                     erro = "A nova senha precisa ter pelo menos 8 caracteres."
                 else:
+                    # Derruba a sessão aberta do usuário - quem estiver com
+                    # ela (inclusive alguém que roubou a senha antiga) sai.
                     cursor.execute(
-                        "UPDATE users SET password_hash = %s WHERE id = %s RETURNING email",
+                        "UPDATE users SET password_hash = %s, session_token = NULL WHERE id = %s",
                         (generate_password_hash(nova_senha), user_id),
                     )
-                    row = cursor.fetchone()
                     conn.commit()
-                    registrar_auditoria("redefinir_senha", f"'{row[0]}'" if row else f"user_id={user_id}")
+                    registrar_auditoria("redefinir_senha", f"'{alvo['email']}'")
                     mensagem = "Senha redefinida."
 
             elif acao == "alternar_status":
                 user_id = request.form.get("user_id")
-                if eh_unico_admin_ativo(cursor, user_id):
+                alvo = alvo_no_escopo(cursor, user_id)
+                if not alvo:
+                    erro = "Usuário não encontrado."
+                elif eh_unico_admin_ativo(cursor, user_id):
                     erro = "Não é possível desativar o único usuário admin ativo."
                 else:
-                    cursor.execute(
-                        "UPDATE users SET active = NOT active WHERE id = %s RETURNING email, active",
-                        (user_id,),
+                    ativando = not alvo["active"]
+                    tem_vaga, limite = (
+                        tenant_tem_vaga(cursor, alvo["tenant_id"])
+                        if ativando and alvo["role"] != "admin"
+                        else (True, None)
                     )
-                    email_usuario, ativo_novo = cursor.fetchone()
-                    conn.commit()
-                    acao_log = "ativar_usuario" if ativo_novo else "desativar_usuario"
-                    registrar_auditoria(acao_log, f"'{email_usuario}'")
-                    mensagem = "Status do usuário atualizado."
+                    if not tem_vaga:
+                        erro = mensagem_limite_atingido(limite, eh_gestor)
+                    else:
+                        # Desativar derruba a sessão na hora; ao reativar o
+                        # token já está nulo, então o usuário loga de novo.
+                        cursor.execute(
+                            "UPDATE users SET active = NOT active, session_token = NULL WHERE id = %s",
+                            (user_id,),
+                        )
+                        conn.commit()
+                        acao_log = "ativar_usuario" if ativando else "desativar_usuario"
+                        registrar_auditoria(acao_log, f"'{alvo['email']}'")
+                        mensagem = "Status do usuário atualizado."
 
             elif acao == "excluir":
                 user_id = request.form.get("user_id")
@@ -1020,11 +1279,13 @@ def admin_usuarios():
     filtro_tenant_id = request.args.get("tenant_id", "").strip()
     if filtro_tenant_id and not filtro_tenant_id.isdigit():
         filtro_tenant_id = ""
+    if eh_gestor:
+        filtro_tenant_id = str(meu_tenant_id)
     filtro_status = request.args.get("status", "").strip()
     if filtro_status not in ("ativo", "inativo"):
         filtro_status = ""
     filtro_role = request.args.get("role", "").strip()
-    if filtro_role not in ("admin", "user"):
+    if filtro_role not in (("gestor", "user") if eh_gestor else ROLES_USUARIO):
         filtro_role = ""
 
     condicoes = []
@@ -1032,6 +1293,8 @@ def admin_usuarios():
     if filtro_tenant_id:
         condicoes.append("t.id = %s")
         parametros.append(filtro_tenant_id)
+    if eh_gestor:
+        condicoes.append("u.role <> 'admin'")
     if filtro_status:
         condicoes.append("u.active = %s")
         parametros.append(filtro_status == "ativo")
@@ -1059,23 +1322,38 @@ def admin_usuarios():
             if usuario["last_login_at"]:
                 usuario["last_login_at"] = usuario["last_login_at"].astimezone(TZ_BRASILIA)
 
-        cursor.execute("SELECT id, name FROM tenants WHERE active = true ORDER BY name")
+        cursor.execute(
+            """
+            SELECT t.id, t.name, t.max_active_users,
+                   (SELECT count(*) FROM users u
+                    WHERE u.tenant_id = t.id AND u.active = true AND u.role <> 'admin') AS ativos
+            FROM tenants t
+            WHERE t.active = true
+            ORDER BY t.name
+            """
+        )
         tenants = cursor.fetchall()
         cursor.close()
     finally:
         conn.close()
 
+    # Resumo "X de Y ativos" do tenant em foco: sempre o do gestor; pro
+    # super-admin, o do filtro de tenant, se tiver um.
+    resumo_tenant = next((t for t in tenants if str(t["id"]) == filtro_tenant_id), None)
+
     return render_template(
         "admin/usuarios.html",
         usuarios=usuarios,
         tenants=tenants,
+        resumo_tenant=resumo_tenant,
+        eh_gestor=eh_gestor,
         filtro_tenant_id=filtro_tenant_id,
         filtro_status=filtro_status,
         filtro_role=filtro_role,
         erro=erro,
         mensagem=mensagem,
         nome_usuario=session["nome_exibicao"],
-        is_admin=True,
+        **contexto_perfil(),
     )
 
 
@@ -1104,7 +1382,7 @@ def admin_auditoria():
         registros=registros,
         acoes_labels=ACOES_AUDITORIA_LABELS,
         nome_usuario=session["nome_exibicao"],
-        is_admin=True,
+        **contexto_perfil(),
     )
 
 

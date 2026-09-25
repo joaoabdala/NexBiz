@@ -94,8 +94,15 @@ O primeiro script lê credenciais de um `.env.migration` (não commitado) - só 
 
 ## Papéis de usuário
 
-- **admin:** acesso à tela `/admin` (CRUD de usuários e tenants).
+- **admin (super-admin):** acesso global à tela `/admin` (CRUD de usuários e tenants, auditoria).
+- **gestor:** administra só os usuários comuns do próprio tenant, pelo link "Usuários" da navbar: cria, ativa/inativa, redefine senha e edita o nome. Não exclui usuários, não altera role nem tenant e não enxerga outros tenants.
 - **user:** acesso apenas à consulta de CNPJ.
+
+Cada tenant tem um **limite de usuários ativos** (`tenants.max_active_users`), obrigatório ao criar o tenant. Gestores contam no limite; super-admins não. Criar ou reativar um usuário além do limite é recusado. Se o limite for reduzido abaixo do número de ativos, ninguém é desativado, mas novas ativações ficam bloqueadas.
+
+**Sessão única:** cada login gera um token novo (`users.session_token`) e toda requisição compara o token do cookie com o do banco. Logar em outro dispositivo derruba a sessão anterior. Desativar o usuário ou o tenant, ou redefinir a senha, derruba a sessão na hora. Role e tenant são relidos do banco a cada requisição.
+
+> **Deploy:** aplique o `db/schema.sql` **antes** de subir o código. As colunas novas são lidas em toda requisição. No primeiro acesso depois do deploy, todos precisam logar de novo.
 
 Todo usuário pertence a um tenant (empresa). Não é permitido desativar, excluir ou remover a role `admin` do único usuário admin ativo do sistema, nem mover esse admin para um tenant inativo, nem desativar o tenant que contém o único admin ativo - qualquer uma dessas ações causaria perda total de acesso à administração.
 

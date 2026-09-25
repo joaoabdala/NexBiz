@@ -138,11 +138,17 @@
             <!-- Direita: acesso admin + toggle de tema + perfil do usuário + botão mobile -->
             <div class="d-flex align-items-center gap-3 ms-auto">
 
-                <!-- Acesso à área de admin - só aparece pra quem tem role=admin -->
-                {% if is_admin %}
+                <!-- Acesso à gestão: "Admin" pro super-admin, "Usuários" pro gestor
+                     (a mesma tela, presa ao tenant dele); usuário comum não vê -->
+                {% if is_super_admin %}
                     <a href="{{ url_for('admin_usuarios') }}" class="btn-admin-nav" aria-label="Administração">
                         <i class="bi bi-shield-lock"></i>
                         <span class="d-none d-sm-inline">Admin</span>
+                    </a>
+                {% elif pode_gerenciar_usuarios %}
+                    <a href="{{ url_for('admin_usuarios') }}" class="btn-admin-nav" aria-label="Usuários do tenant">
+                        <i class="bi bi-people"></i>
+                        <span class="d-none d-sm-inline">Usuários</span>
                     </a>
                 {% endif %}
 
@@ -657,11 +663,23 @@
                 });
             }
 
+            // Sessão derrubada no meio da consulta (login em outro dispositivo
+            // ou acesso desativado): o servidor responde 401 e manda pro login.
+            function respostaInpi(res) {
+                if (res.status === 401) {
+                    return res.json().then(function (data) {
+                        window.location.href = '/login?motivo=' + encodeURIComponent(data.motivo || 'expirada');
+                        return new Promise(function () {});  // não mostra erro enquanto redireciona
+                    });
+                }
+                return res.json();
+            }
+
             // ── 1. Consulta INPI por CNPJ ──────────────────────
             var elCnpj = document.getElementById('inpi-resultado');
             if (elCnpj) {
                 fetch('/consulta-inpi/' + cnpj)
-                    .then(function (res) { return res.json(); })
+                    .then(respostaInpi)
                     .then(function (data) {
                         if (data.erro) {
                             elCnpj.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';
@@ -684,7 +702,7 @@
             var elNome = document.getElementById('inpi-nome-resultado');
             if (elNome) {
                 fetch('/consulta-inpi-nome?nome=' + nomeEncoded)
-                    .then(function (res) { return res.json(); })
+                    .then(respostaInpi)
                     .then(function (data) {
                         if (data.erro) {
                             elNome.innerHTML = '<span class="inpi-erro">Não foi possível consultar o INPI</span>';

@@ -131,7 +131,7 @@
                 NexBiz<span class="navbar-logo-ponto">.</span>
             </a>
             <span class="navbar-titulo position-absolute start-50 translate-middle-x d-none d-md-block">
-                Admin - Usuários
+                {% if eh_gestor %}Usuários - {{ resumo_tenant.name if resumo_tenant else '' }}{% else %}Admin - Usuários{% endif %}
             </span>
             <div class="d-flex align-items-center gap-3 ms-auto">
                 <a href="{{ url_for('index') }}" class="btn-admin-nav">
@@ -173,11 +173,16 @@
 
     <main class="container conteudo-principal">
 
-        <div class="admin-tabs mb-3">
-            <a href="{{ url_for('admin_usuarios') }}" class="ativo">Usuários</a>
-            <a href="{{ url_for('admin_tenants') }}">Tenants</a>
-            <a href="{{ url_for('admin_auditoria') }}">Auditoria</a>
-        </div>
+        {# Rótulos das roles - 'admin' no banco é o super-admin. #}
+        {% set rotulos_role = {'admin': 'Super-admin', 'gestor': 'Gestor', 'user': 'Usuário'} %}
+
+        {% if is_super_admin %}
+            <div class="admin-tabs mb-3">
+                <a href="{{ url_for('admin_usuarios') }}" class="ativo">Usuários</a>
+                <a href="{{ url_for('admin_tenants') }}">Tenants</a>
+                <a href="{{ url_for('admin_auditoria') }}">Auditoria</a>
+            </div>
+        {% endif %}
 
         {% for categoria, texto in get_flashed_messages(with_categories=true) %}
             <div class="msg-base {{ 'msg-sucesso' if categoria == 'success' else 'msg-erro' }}" role="alert">
@@ -200,15 +205,17 @@
         <!-- Filtros da listagem - GET, sem action (envia pra própria URL) -->
         <form method="GET" class="filtros-usuarios mb-3">
             <div class="row g-2 align-items-end">
-                <div class="col-6 col-md-3">
-                    <label class="campo-label">Empresa</label>
-                    <select name="tenant_id" class="admin-select w-100" data-auto-submit>
-                        <option value="">Todas</option>
-                        {% for t in tenants %}
-                            <option value="{{ t.id }}" {% if t.id|string == filtro_tenant_id %}selected{% endif %}>{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                {% if not eh_gestor %}
+                    <div class="col-6 col-md-3">
+                        <label class="campo-label">Empresa</label>
+                        <select name="tenant_id" class="admin-select w-100" data-auto-submit>
+                            <option value="">Todas</option>
+                            {% for t in tenants %}
+                                <option value="{{ t.id }}" {% if t.id|string == filtro_tenant_id %}selected{% endif %}>{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                {% endif %}
                 <div class="col-6 col-md-2">
                     <label class="campo-label">Status</label>
                     <select name="status" class="admin-select w-100" data-auto-submit>
@@ -221,11 +228,12 @@
                     <label class="campo-label">Role</label>
                     <select name="role" class="admin-select w-100" data-auto-submit>
                         <option value="">Todas</option>
-                        <option value="admin" {% if filtro_role == 'admin' %}selected{% endif %}>admin</option>
-                        <option value="user" {% if filtro_role == 'user' %}selected{% endif %}>user</option>
+                        {% for valor in (['gestor', 'user'] if eh_gestor else ['admin', 'gestor', 'user']) %}
+                            <option value="{{ valor }}" {% if filtro_role == valor %}selected{% endif %}>{{ rotulos_role[valor] }}</option>
+                        {% endfor %}
                     </select>
                 </div>
-                {% if filtro_tenant_id or filtro_status or filtro_role %}
+                {% if (filtro_tenant_id and not eh_gestor) or filtro_status or filtro_role %}
                     <div class="col-6 col-md-2">
                         <a href="{{ url_for('admin_usuarios') }}" class="btn-secundario btn-mini d-inline-block">
                             <i class="bi bi-x-lg me-1"></i>Limpar filtros
@@ -236,7 +244,19 @@
         </form>
 
         <div class="d-flex align-items-center justify-content-between mb-3">
-            <h4 class="titulo-resultado mb-0">Usuários cadastrados</h4>
+            <div>
+                <h4 class="titulo-resultado mb-0">Usuários cadastrados</h4>
+                {% if resumo_tenant %}
+                    <span class="ultimo-login d-block">
+                        <i class="bi bi-people me-1"></i>
+                        {% if resumo_tenant.max_active_users %}
+                            {{ resumo_tenant.ativos }} de {{ resumo_tenant.max_active_users }} usuários ativos
+                        {% else %}
+                            {{ resumo_tenant.ativos }} usuários ativos (sem limite)
+                        {% endif %}
+                    </span>
+                {% endif %}
+            </div>
             <button
                 type="button"
                 class="btn-primario btn-mini"
@@ -267,21 +287,25 @@
                             <label class="campo-label">Senha inicial</label>
                             <input type="password" name="senha" class="form-control" minlength="8" required>
                         </div>
-                        <div class="col-6 col-md-2">
-                            <label class="campo-label">Tenant</label>
-                            <select name="tenant_id" class="form-select" required>
-                                {% for t in tenants %}
-                                    <option value="{{ t.id }}">{{ t.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-6 col-md-1">
-                            <label class="campo-label">Role</label>
-                            <select name="role" class="form-select">
-                                <option value="user">user</option>
-                                <option value="admin">admin</option>
-                            </select>
-                        </div>
+                        {# Gestor sempre cria usuário comum no próprio tenant - o servidor força isso. #}
+                        {% if not eh_gestor %}
+                            <div class="col-6 col-md-2">
+                                <label class="campo-label">Tenant</label>
+                                <select name="tenant_id" class="form-select" required>
+                                    {% for t in tenants %}
+                                        <option value="{{ t.id }}">{{ t.name }}{% if t.max_active_users %} ({{ t.ativos }}/{{ t.max_active_users }}){% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-1">
+                                <label class="campo-label">Role</label>
+                                <select name="role" class="form-select">
+                                    {% for valor in ['user', 'gestor', 'admin'] %}
+                                        <option value="{{ valor }}">{{ rotulos_role[valor] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        {% endif %}
                         <div class="col-12 col-md-1">
                             <button type="submit" class="btn-primario w-100">Criar</button>
                         </div>
@@ -309,13 +333,18 @@
                                     {% endif %}
                                 </span>
                             </div>
-                            <span class="tag tag-info">{{ usuario.tenant_name }}</span>
-                            <span class="tag {{ 'tag-aviso' if usuario.role == 'admin' else 'tag-info' }}">{{ usuario.role }}</span>
+                            {% if not eh_gestor %}
+                                <span class="tag tag-info">{{ usuario.tenant_name }}</span>
+                            {% endif %}
+                            <span class="tag {{ 'tag-aviso' if usuario.role in ('admin', 'gestor') else 'tag-info' }}">{{ rotulos_role.get(usuario.role, usuario.role) }}</span>
                             <span class="tag {{ 'tag-ativa' if usuario.active else 'tag-inativa' }}">
                                 {{ 'Ativo' if usuario.active else 'Inativo' }}
                             </span>
                         </div>
 
+                        {# Gestor só mexe em usuários comuns - outros gestores ficam só pra consulta. #}
+                        {% set pode_editar = not eh_gestor or usuario.role == 'user' %}
+                        {% if pode_editar %}
                         <div class="d-flex gap-2">
                             <button type="button" class="acao-icone" data-bs-toggle="collapse"
                                     data-bs-target="#editar-usuario-{{ usuario.id }}" title="Editar">
@@ -333,16 +362,21 @@
                                     <i class="bi {{ 'bi-toggle-on' if usuario.active else 'bi-toggle-off' }}"></i>
                                 </button>
                             </form>
-                            <form method="POST" data-confirmar="Excluir o usuário {{ usuario.email }}? Essa ação não pode ser desfeita.">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="acao" value="excluir">
-                                <input type="hidden" name="user_id" value="{{ usuario.id }}">
-                                <button type="submit" class="acao-icone perigo" title="Excluir">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
+                            {% if not eh_gestor %}
+                                <form method="POST" data-confirmar="Excluir o usuário {{ usuario.email }}? Essa ação não pode ser desfeita.">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="acao" value="excluir">
+                                    <input type="hidden" name="user_id" value="{{ usuario.id }}">
+                                    <button type="submit" class="acao-icone perigo" title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            {% endif %}
                         </div>
+                        {% endif %}
                     </div>
+
+                    {% if pode_editar %}
 
                     <!-- Editar nome / tenant / role -->
                     <div class="collapse" id="editar-usuario-{{ usuario.id }}">
@@ -355,21 +389,24 @@
                                     <label class="campo-label">Nome</label>
                                     <input type="text" name="nome" value="{{ usuario.name }}" class="admin-input">
                                 </div>
-                                <div>
-                                    <label class="campo-label">Tenant</label>
-                                    <select name="tenant_id" class="admin-select">
-                                        {% for t in tenants %}
-                                            <option value="{{ t.id }}" {% if t.id == usuario.tenant_id %}selected{% endif %}>{{ t.name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="campo-label">Role</label>
-                                    <select name="role" class="admin-select">
-                                        <option value="user" {% if usuario.role == 'user' %}selected{% endif %}>user</option>
-                                        <option value="admin" {% if usuario.role == 'admin' %}selected{% endif %}>admin</option>
-                                    </select>
-                                </div>
+                                {% if not eh_gestor %}
+                                    <div>
+                                        <label class="campo-label">Tenant</label>
+                                        <select name="tenant_id" class="admin-select">
+                                            {% for t in tenants %}
+                                                <option value="{{ t.id }}" {% if t.id == usuario.tenant_id %}selected{% endif %}>{{ t.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="campo-label">Role</label>
+                                        <select name="role" class="admin-select">
+                                            {% for valor in ['user', 'gestor', 'admin'] %}
+                                                <option value="{{ valor }}" {% if usuario.role == valor %}selected{% endif %}>{{ rotulos_role[valor] }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                {% endif %}
                                 <button type="submit" class="btn-secundario btn-mini">Salvar</button>
                             </form>
                         </div>
@@ -390,11 +427,12 @@
                             </form>
                         </div>
                     </div>
+                    {% endif %}
                 </div>
             {% else %}
                 <div class="linha-usuario">
                     <span class="msg-vazio">
-                        {% if filtro_tenant_id or filtro_status or filtro_role %}
+                        {% if (filtro_tenant_id and not eh_gestor) or filtro_status or filtro_role %}
                             Nenhum usuário encontrado com esses filtros.
                         {% else %}
                             Nenhum usuário cadastrado ainda.
